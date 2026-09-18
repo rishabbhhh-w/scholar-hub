@@ -1,0 +1,88 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-primary: 'Plus Jakarta Sans', system-ui, sans-serif;
+    --background: 40 20% 98%; /* #fcfbf9 */
+    --foreground: 160 30% 10%; /* #111827 */
+    --card: 0 0% 100%;
+    --card-foreground: 160 30% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 160 30% 10%;
+    --primary: 163 80% 16%; /* #064e3b deep forest green */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 140 35% 94%; /* #eaf5ea mint sage */
+    --secondary-foreground: 163 80% 16%;
+    --muted: 150 10% 94%;
+    --muted-foreground: 150 10% 40%;
+    --accent: 38 92% 50%; /* saffron */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 150 15% 90%;
+    --input: 150 15% 90%;
+    --ring: 163 80% 16%;
+    --radius: 1rem;
+  }
+
+  .dark {
+    --background: 155 35% 5%; /* #07130e */
+    --foreground: 150 10% 95%;
+    --card: 155 30% 9%; /* #0f231c */
+    --card-foreground: 150 10% 95%;
+    --popover: 155 30% 9%;
+    --popover-foreground: 150 10% 95%;
+    --primary: 158 64% 45%; /* vibrant emerald in dark mode */
+    --primary-foreground: 155 40% 6%;
+    --secondary: 155 25% 15%;
+    --secondary-foreground: 150 20% 88%;
+    --muted: 155 25% 14%;
+    --muted-foreground: 150 15% 65%;
+    --accent: 38 92% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 155 25% 18%;
+    --input: 155 25% 18%;
+    --ring: 158 64% 45%;
+  }
+}
+
+body {
+  font-family: var(--font-primary);
+  background-color: #fcfbf9;
+  color: #111827;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.dark body {
+  background-color: #07130e;
+  color: #f1f5f9;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(6, 78, 59, 0.2);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(6, 78, 59, 0.4);
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(74, 222, 128, 0.2);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(74, 222, 128, 0.4);
+}
