@@ -3,9 +3,8 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 
 export const metadata: Metadata = {
-  title: "Scholar Hub | AI-Powered Scholarship & Fellowship Platform",
-  description: "Discover scholarships made for you, understand eligibility, organise documents, and track every application with confidence.",
-  keywords: ["Scholar Hub", "Scholarships", "Fellowships", "AI Scholarship Matching", "National Fellowship ST", "Post-Matric Scholarship", "Education Grants"],
+  title: "Scholar Hub",
+  description: "Scholar Hub - Scholarship & Fellowship Platform",
 };
 
 export default function RootLayout({
