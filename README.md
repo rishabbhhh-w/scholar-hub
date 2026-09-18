@@ -1,6 +1,6 @@
 # Scholar Hub 🎓🇮🇳
 
-**Scholar Hub** is an intelligent, national-level scholarship aggregation and management platform designed to help ST/SC/OBC/Minority/General students across India discover, check eligibility, apply for, and track government & institutional scholarships (NSP, PFMS, UGC, State Schemes). It also features a dedicated **Nodal Officer Portal** for administrative review, student roster management, and application verification.
+**Scholar Hub** is an intelligent, national-level scholarship aggregation and management platform designed to help ST/SC/OBC/Minority/General students across India discover, check eligibility, apply for, and track government & institutional scholarships (NSP, PFMS, UGC, State Schemes). It also features a dedicated **Nodal Officer  Portal** for administrative review, student roster management, and application verification.
 
 ---
 
