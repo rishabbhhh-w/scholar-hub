@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Bot, Send, Sparkles, X, ChevronUp, User, ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Bot, Send, Sparkles, X, ArrowRight } from "lucide-react";
 
 interface Message {
   id: string;
@@ -26,9 +25,9 @@ const INITIAL_MESSAGES: Message[] = [
       "Am I eligible for National ST Fellowship?",
       "Why does my Income Certificate need attention?",
       "How to link Aadhaar with Bank for DBT?",
-      "Show all Ph.D. scholarships"
+      "Show all Ph.D. scholarships",
     ],
-  }
+  },
 ];
 
 export function SarthiChatWidget() {
@@ -37,6 +36,19 @@ export function SarthiChatWidget() {
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Draggable position state
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const dragStartRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number }>({
+    startX: 0,
+    startY: 0,
+    initialX: 0,
+    initialY: 0,
+  });
+  const hasMovedRef = useRef(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -47,6 +59,77 @@ export function SarthiChatWidget() {
       scrollToBottom();
     }
   }, [messages, isOpen]);
+
+  // Pointer drag event handlers
+  const handlePointerDown = (clientX: number, clientY: number) => {
+    const buttonEl = buttonRef.current;
+    if (!buttonEl) return;
+    const rect = buttonEl.getBoundingClientRect();
+
+    dragStartRef.current = {
+      startX: clientX,
+      startY: clientY,
+      initialX: rect.left,
+      initialY: rect.top,
+    };
+    hasMovedRef.current = false;
+  };
+
+  const handlePointerMove = (clientX: number, clientY: number) => {
+    if (dragStartRef.current.startX === 0) return;
+    const { startX, startY, initialX, initialY } = dragStartRef.current;
+    const deltaX = clientX - startX;
+    const deltaY = clientY - startY;
+
+    if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
+      hasMovedRef.current = true;
+      setIsDragging(true);
+    }
+
+    if (hasMovedRef.current) {
+      const newX = Math.max(12, Math.min(window.innerWidth - 64, initialX + deltaX));
+      const newY = Math.max(12, Math.min(window.innerHeight - 64, initialY + deltaY));
+      setPosition({ x: newX, y: newY });
+    }
+  };
+
+  const handlePointerUp = () => {
+    dragStartRef.current.startX = 0;
+    setTimeout(() => {
+      setIsDragging(false);
+    }, 50);
+  };
+
+  // Global mouse & touch listeners while dragging
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      handlePointerMove(e.clientX, e.clientY);
+    };
+    const onMouseUp = () => {
+      handlePointerUp();
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    };
+    const onTouchEnd = () => {
+      handlePointerUp();
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("touchmove", onTouchMove, { passive: true });
+    window.addEventListener("touchend", onTouchEnd);
+
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
+    };
+  }, []);
 
   const handleSendMessage = (textToSend?: string) => {
     const query = textToSend || inputValue;
@@ -63,7 +146,6 @@ export function SarthiChatWidget() {
     if (!textToSend) setInputValue("");
     setIsTyping(true);
 
-    // AI response simulation with realistic domain answers
     setTimeout(() => {
       let botReply = "";
       let actionLink = undefined;
@@ -98,10 +180,69 @@ export function SarthiChatWidget() {
     }, 850);
   };
 
+  // Compute modal window location relative to button position
+  const getModalStyle = () => {
+    if (!position || typeof window === "undefined") return {};
+    const modalWidth = Math.min(window.innerWidth - 24, 400);
+    const modalHeight = 540;
+
+    let left = position.x - modalWidth + 52;
+    if (left < 12) left = 12;
+    if (left + modalWidth > window.innerWidth - 12) left = window.innerWidth - modalWidth - 12;
+
+    let top = position.y - modalHeight - 12;
+    if (top < 12) top = position.y + 60;
+    if (top + modalHeight > window.innerHeight - 12) top = window.innerHeight - modalHeight - 12;
+
+    return { left: `${left}px`, top: `${top}px` };
+  };
+
   return (
-    <div className="fixed bottom-6 right-6 z-50">
-      {isOpen ? (
-        <div className="flex h-[540px] w-[360px] sm:w-[400px] flex-col rounded-3xl border border-stone-200/90 bg-white shadow-2xl transition-all dark:border-[#193c30] dark:bg-[#0c1c16] overflow-hidden">
+    <>
+      {/* Small Square Draggable AI Bot Logo Button */}
+      <div
+        style={
+          position
+            ? { left: `${position.x}px`, top: `${position.y}px` }
+            : undefined
+        }
+        className={`fixed z-50 ${!position ? "bottom-6 right-6" : ""}`}
+      >
+        <button
+          ref={buttonRef}
+          onClick={(e) => {
+            if (hasMovedRef.current) {
+              e.preventDefault();
+              e.stopPropagation();
+              return;
+            }
+            setIsOpen((prev) => !prev);
+          }}
+          onMouseDown={(e) => handlePointerDown(e.clientX, e.clientY)}
+          onTouchStart={(e) => {
+            if (e.touches.length > 0) {
+              handlePointerDown(e.touches[0].clientX, e.touches[0].clientY);
+            }
+          }}
+          className={`relative group flex h-13 w-13 items-center justify-center rounded-2xl bg-[#064e3b] text-white shadow-2xl transition-transform active:scale-95 border border-emerald-400/30 cursor-grab active:cursor-grabbing select-none dark:bg-emerald-600 dark:border-emerald-300/40 ${
+            isDragging ? "scale-105 shadow-emerald-950/40" : "hover:scale-105"
+          }`}
+          title="Ask Scholar AI (Drag anywhere)"
+          aria-label="Open Scholar AI Chatbot"
+        >
+          <Bot className="h-6 w-6 text-white" />
+          <Sparkles className="h-3.5 w-3.5 text-amber-300 fill-amber-300 absolute -top-1 -right-1 drop-shadow-md animate-pulse" />
+        </button>
+      </div>
+
+      {/* Chatbot Window */}
+      {isOpen && (
+        <div
+          style={position ? getModalStyle() : undefined}
+          className={`fixed z-50 flex h-[540px] w-[360px] sm:w-[400px] flex-col rounded-3xl border border-stone-200/90 bg-white shadow-2xl transition-all dark:border-[#193c30] dark:bg-[#0c1c16] overflow-hidden ${
+            !position ? "bottom-24 right-6" : ""
+          }`}
+        >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-stone-100 bg-[#064e3b] p-4 text-white dark:bg-[#0f281e]">
             <div className="flex items-center gap-2.5">
@@ -213,24 +354,7 @@ export function SarthiChatWidget() {
             </form>
           </div>
         </div>
-      ) : (
-        /* Floating Button matching Reference Image 1 "Ask Scholar AI" card style */
-        <button
-          onClick={() => setIsOpen(true)}
-          className="group flex items-center gap-3 rounded-2xl border border-stone-200/90 bg-white px-4 py-3 shadow-xl transition-all duration-200 hover:-translate-y-1 hover:border-emerald-600/40 hover:shadow-2xl dark:border-[#193c30] dark:bg-[#0f231c]"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800 group-hover:bg-[#064e3b] group-hover:text-white transition-colors dark:bg-emerald-950 dark:text-emerald-300">
-            <Bot className="h-5 w-5" />
-          </div>
-          <div className="text-left">
-            <p className="text-xs font-bold text-stone-900 dark:text-stone-100 flex items-center gap-1.5">
-              Ask Scholar AI
-              <Sparkles className="h-3 w-3 text-amber-500 fill-amber-500" />
-            </p>
-            <p className="text-[11px] text-stone-500 dark:text-stone-400">Personal guidance</p>
-          </div>
-        </button>
       )}
-    </div>
+    </>
   );
 }
