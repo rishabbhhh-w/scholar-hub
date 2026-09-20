@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   GraduationCap,
@@ -26,13 +26,117 @@ import { ScholarshipCard } from "@/components/shared/ScholarshipCard";
 import { Logo } from "@/components/shared/Logo";
 import { DetailModal } from "@/components/shared/DetailModal";
 import { SarthiChatWidget } from "@/components/shared/SarthiChatWidget";
+import { Skeleton } from "@/components/ui/skeleton";
+import { createClient } from "@/lib/supabase/client";
+
+interface HeroScholarship {
+  id: string;
+  title: string;
+  amount_monthly: number;
+  deadline: string;
+  category_eligible?: string[] | string;
+}
+
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return "Good morning, Scholar";
+  if (hour >= 12 && hour < 17) return "Good afternoon, Scholar";
+  if (hour >= 17 && hour < 21) return "Good evening, Scholar";
+  return "Good night, Scholar";
+}
+
+function formatDeadline(dateStr: string): string {
+  if (!dateStr) return "Soon";
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  } catch {
+    return dateStr;
+  }
+}
 
 export default function LandingPage() {
   const [selectedScholarship, setSelectedScholarship] = useState<any>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [faqOpen, setFaqOpen] = useState<number | null>(0);
 
-  const featuredScholarship = SCHOLARSHIPS[0]; // National Fellowship for ST Students
+  // Hero Card Real Supabase Scholarships State
+  const [heroScholarships, setHeroScholarships] = useState<HeroScholarship[]>([]);
+  const [loadingHero, setLoadingHero] = useState(true);
+
+  const supabase = createClient();
+
+  useEffect(() => {
+    const fetchHeroScholarships = async () => {
+      setLoadingHero(true);
+      try {
+        const { data, error } = await supabase
+          .from("scholarships")
+          .select("id, title, amount_monthly, deadline, category_eligible")
+          .eq("status", "active")
+          .order("deadline", { ascending: true })
+          .limit(3);
+
+        if (!error && data && data.length > 0) {
+          setHeroScholarships(data as HeroScholarship[]);
+        } else {
+          // Graceful fallback if database empty or fetch fails
+          setHeroScholarships([
+            {
+              id: "hero-1",
+              title: "National Fellowship for ST Students",
+              amount_monthly: 37000,
+              deadline: "2026-09-28",
+              category_eligible: ["ST"],
+            },
+            {
+              id: "hero-2",
+              title: "Post-Matric Scholarship for ST/SC",
+              amount_monthly: 12000,
+              deadline: "2026-10-15",
+              category_eligible: ["ST", "SC"],
+            },
+            {
+              id: "hero-3",
+              title: "National Overseas Scholarship",
+              amount_monthly: 45000,
+              deadline: "2026-10-30",
+              category_eligible: ["ST", "OBC"],
+            },
+          ]);
+        }
+      } catch (err) {
+        // Graceful fallback
+        setHeroScholarships([
+          {
+            id: "hero-1",
+            title: "National Fellowship for ST Students",
+            amount_monthly: 37000,
+            deadline: "2026-09-28",
+            category_eligible: ["ST"],
+          },
+          {
+            id: "hero-2",
+            title: "Post-Matric Scholarship for ST/SC",
+            amount_monthly: 12000,
+            deadline: "2026-10-15",
+            category_eligible: ["ST", "SC"],
+          },
+          {
+            id: "hero-3",
+            title: "National Overseas Scholarship",
+            amount_monthly: 45000,
+            deadline: "2026-10-30",
+            category_eligible: ["ST", "OBC"],
+          },
+        ]);
+      } finally {
+        setLoadingHero(false);
+      }
+    };
+
+    fetchHeroScholarships();
+  }, []);
 
   const faqs = [
     {
@@ -55,12 +159,12 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[#fcfbf9] text-stone-900 dark:bg-[#07130e] dark:text-stone-100 selection:bg-emerald-200">
-      {/* Top Navbar strictly matching Reference Image 1 */}
+      {/* Top Navbar */}
       <Navbar />
 
-      {/* Hero Section - Exact Replica of Reference Image 1 */}
+      {/* Hero Section */}
       <section className="relative overflow-hidden pt-12 pb-20 lg:pt-20 lg:pb-28">
-        {/* Subtle background ambient mesh */}
+        {/* Ambient background mesh */}
         <div className="pointer-events-none absolute -top-40 right-0 h-96 w-96 rounded-full bg-emerald-100/40 blur-3xl dark:bg-emerald-950/20" />
         <div className="pointer-events-none absolute top-1/2 left-0 h-96 w-96 rounded-full bg-amber-100/30 blur-3xl dark:bg-amber-950/10" />
 
@@ -68,13 +172,13 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-12 lg:gap-8">
             {/* Left Column: Headline, Subtitle, Actions, Badges */}
             <div className="lg:col-span-7 space-y-8">
-              {/* Mint Badge - Matching Image 1 */}
+              {/* Mint Badge */}
               <div className="inline-flex items-center gap-2 rounded-full bg-[#eaf5ea] px-3.5 py-1.5 text-xs font-semibold text-[#064e3b] border border-[#d2ebd2] dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800/60 shadow-xs">
                 <Sparkles className="h-3.5 w-3.5" />
                 <span>AI-powered scholarship guidance</span>
               </div>
 
-              {/* Huge Bold Display Heading - Exact Replica of Image 1 */}
+              {/* Display Heading */}
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-stone-900 dark:text-white leading-[1.08]">
                 Every opportunity.
                 <br />
@@ -83,12 +187,12 @@ export default function LandingPage() {
                 forward.
               </h1>
 
-              {/* Subtitle - Exact Replica of Image 1 */}
+              {/* Subtitle */}
               <p className="max-w-xl text-lg sm:text-xl font-normal text-stone-600 dark:text-stone-300 leading-relaxed">
                 Discover scholarships made for you, understand eligibility, organise documents, and track every application with confidence.
               </p>
 
-              {/* Dual Action Buttons - Exact Replica of Image 1 */}
+              {/* Dual Action Buttons */}
               <div className="flex flex-wrap items-center gap-4 pt-2">
                 <Link href="/dashboard">
                   <button className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#064e3b] px-7 py-3.5 text-base font-semibold text-white shadow-sm hover:bg-[#053d2e] hover:shadow-md transition-all active:scale-[0.98] dark:bg-emerald-600 dark:hover:bg-emerald-500">
@@ -104,7 +208,7 @@ export default function LandingPage() {
                 </Link>
               </div>
 
-              {/* Trust Checkmarks - Exact Replica of Image 1 */}
+              {/* Trust Checkmarks */}
               <div className="flex flex-wrap items-center gap-6 pt-4 text-xs sm:text-sm font-medium text-stone-600 dark:text-stone-300">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
@@ -121,105 +225,95 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Right Column: Floating Student Overview Card - Exact Replica of Image 1 */}
+            {/* Right Column: Floating Student Overview Card */}
             <div className="lg:col-span-5 flex justify-center lg:justify-end">
               <div className="w-full max-w-md rounded-3xl border border-stone-200/90 bg-white p-6 shadow-2xl shadow-stone-200/60 dark:border-[#193c30] dark:bg-[#0c1c16] dark:shadow-black/40">
-                {/* Header row */}
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-400">
-                        STUDENT OVERVIEW
-                      </span>
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
-                        Demo Preview
-                      </span>
-                    </div>
-                    <h3 className="text-xl font-bold text-stone-900 dark:text-stone-100 mt-0.5">
-                      Good afternoon, Scholar
-                    </h3>
-                  </div>
-                  {/* Generic Graduation Cap Avatar */}
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#dcfce7] text-[#166534] dark:bg-emerald-950 dark:text-emerald-300 ring-2 ring-emerald-500/20">
-                    <GraduationCap className="h-5 w-5" />
-                  </div>
+                {/* Header with Time-Based Greeting */}
+                <div className="mb-5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-400">
+                    STUDENT OVERVIEW
+                  </span>
+                  <h3 className="text-xl font-bold text-stone-900 dark:text-stone-100 mt-0.5">
+                    {getGreeting()}
+                  </h3>
                 </div>
 
-                {/* 3 Metric Pills - Matching Image 1 */}
-                <div className="mt-5 grid grid-cols-3 gap-2.5">
-                  <div className="rounded-2xl bg-stone-100/80 p-3 text-center dark:bg-[#132820]">
-                    <p className="text-lg font-bold text-stone-900 dark:text-stone-100">24</p>
-                    <p className="text-[11px] font-medium text-stone-500 dark:text-stone-400">Matches</p>
-                  </div>
-                  <div className="rounded-2xl bg-stone-100/80 p-3 text-center dark:bg-[#132820]">
-                    <p className="text-lg font-bold text-stone-900 dark:text-stone-100">9</p>
-                    <p className="text-[11px] font-medium text-stone-500 dark:text-stone-400">Applied</p>
-                  </div>
-                  <div className="rounded-2xl bg-stone-100/80 p-3 text-center dark:bg-[#132820]">
-                    <p className="text-lg font-bold text-stone-900 dark:text-stone-100">82%</p>
-                    <p className="text-[11px] font-medium text-stone-500 dark:text-stone-400">Profile</p>
-                  </div>
+                {/* 3 Real Active Scholarships List */}
+                <div className="space-y-3">
+                  {loadingHero ? (
+                    [1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className="rounded-2xl border border-stone-200/80 p-3.5 space-y-2 dark:border-[#193c30]"
+                      >
+                        <Skeleton className="h-4 w-3/4" />
+                        <div className="flex justify-between">
+                          <Skeleton className="h-3 w-1/3" />
+                          <Skeleton className="h-3 w-1/4" />
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    heroScholarships.map((s) => {
+                      const formattedDeadline = formatDeadline(s.deadline);
+                      const categoryTag = Array.isArray(s.category_eligible)
+                        ? s.category_eligible.join(" / ")
+                        : s.category_eligible || "ST / SC / OBC";
+
+                      return (
+                        <div
+                          key={s.id}
+                          onClick={() => {
+                            setSelectedScholarship(s);
+                            setModalOpen(true);
+                          }}
+                          className="cursor-pointer rounded-2xl border border-stone-200/90 p-3.5 transition-all hover:border-emerald-600/40 hover:bg-stone-50/60 dark:border-[#193c30] dark:bg-[#0f231c] dark:hover:bg-[#132d23]"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <h4 className="truncate text-xs sm:text-sm font-bold text-stone-900 dark:text-stone-100">
+                              {s.title}
+                            </h4>
+                            <span className="shrink-0 rounded-md bg-stone-100 px-2 py-0.5 text-[10px] font-bold text-stone-700 dark:bg-[#153228] dark:text-stone-200 border border-stone-200 dark:border-[#193c30]">
+                              {categoryTag}
+                            </span>
+                          </div>
+
+                          <div className="mt-2 flex items-center justify-between text-xs">
+                            <span className="font-semibold text-[#064e3b] dark:text-emerald-400">
+                              ₹{(s.amount_monthly || 0).toLocaleString("en-IN")} / month
+                            </span>
+                            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
+                              Closes {formattedDeadline}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
 
-                {/* Featured Scholarship Inner Card - Matching Image 1 */}
-                <div
-                  onClick={() => {
-                    setSelectedScholarship(featuredScholarship);
-                    setModalOpen(true);
-                  }}
-                  className="mt-5 cursor-pointer rounded-2xl border border-stone-200/90 p-4 transition-all hover:border-emerald-600/40 hover:shadow-md dark:border-[#193c30] dark:bg-[#0f231c]"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-100/90 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300">
-                      <GraduationCap className="h-6 w-6" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h4 className="truncate text-sm font-bold text-stone-900 dark:text-stone-100">
-                        National Fellowship for ST Students
-                      </h4>
-                      <p className="truncate text-xs text-stone-500 dark:text-stone-400">
-                        Ministry of Tribal Affairs
-                      </p>
-                    </div>
+                {/* Soft Highlighted Box Below */}
+                <div className="mt-5 rounded-2xl bg-[#eaf5ea] p-4 border border-[#d2ebd2] dark:bg-[#0f281e] dark:border-[#193c30]">
+                  <h4 className="text-xs font-bold text-[#064e3b] dark:text-emerald-300">
+                    Want to check your eligibility?
+                  </h4>
+                  <p className="text-[11px] text-stone-600 dark:text-stone-300 mt-0.5">
+                    Create a free account or sign in to apply
+                  </p>
+
+                  <div className="mt-3 flex items-center gap-2">
+                    <Link href="/auth?mode=login" className="flex-1">
+                      <button className="w-full rounded-xl border border-[#064e3b] px-3 py-2 text-xs font-semibold text-[#064e3b] hover:bg-[#064e3b]/10 transition-colors dark:border-emerald-400 dark:text-emerald-300 dark:hover:bg-emerald-950">
+                        Sign In
+                      </button>
+                    </Link>
+
+                    <Link href="/auth?mode=register" className="flex-1">
+                      <button className="w-full rounded-xl bg-[#064e3b] px-3 py-2 text-xs font-semibold text-white shadow-xs hover:bg-[#04382a] transition-colors dark:bg-emerald-600 dark:hover:bg-emerald-500">
+                        Register Free →
+                      </button>
+                    </Link>
                   </div>
-
-                  <div className="mt-3.5 flex items-center justify-between text-xs font-semibold">
-                    <span className="text-[#064e3b] dark:text-emerald-400">96% match</span>
-                    <span className="text-stone-500 dark:text-stone-400 font-normal">Closes 28 Sep</span>
-                  </div>
-
-                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-stone-100 dark:bg-[#193c30]">
-                    <div className="h-full rounded-full bg-[#064e3b] dark:bg-emerald-500 w-[96%]" />
-                  </div>
-                </div>
-
-                {/* Two Mini Action Cards Below - Matching Image 1 */}
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <Link
-                    href="/documents"
-                    className="flex flex-col rounded-2xl border border-stone-200/90 p-3.5 transition-all hover:border-emerald-600/40 hover:bg-stone-50/50 dark:border-[#193c30] dark:bg-[#0f231c] dark:hover:bg-[#132d23]"
-                  >
-                    <FileText className="h-5 w-5 text-emerald-800 dark:text-emerald-400 mb-1" />
-                    <span className="text-xs font-bold text-stone-900 dark:text-stone-100">
-                      8 documents ready
-                    </span>
-                    <span className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">
-                      2 need attention
-                    </span>
-                  </Link>
-
-                  <Link
-                    href="/assistant"
-                    className="flex flex-col rounded-2xl border border-stone-200/90 p-3.5 transition-all hover:border-emerald-600/40 hover:bg-stone-50/50 dark:border-[#193c30] dark:bg-[#0f231c] dark:hover:bg-[#132d23]"
-                  >
-                    <Bot className="h-5 w-5 text-emerald-800 dark:text-emerald-400 mb-1" />
-                    <span className="text-xs font-bold text-stone-900 dark:text-stone-100">
-                      Ask Scholar AI
-                    </span>
-                    <span className="text-[11px] text-stone-500 dark:text-stone-400">
-                      Personal guidance
-                    </span>
-                  </Link>
                 </div>
               </div>
             </div>
