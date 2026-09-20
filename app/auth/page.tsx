@@ -56,6 +56,11 @@ function AuthContent() {
   const [isRegisterSuccess, setIsRegisterSuccess] = useState(false);
   const [isAdminLogin, setIsAdminLogin] = useState(false);
 
+  // Forgot password states
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
+  const [isResetSending, setIsResetSending] = useState(false);
+
   const supabase = createClient();
 
   useEffect(() => {
@@ -92,7 +97,6 @@ function AuthContent() {
         }
 
         if (data?.user) {
-          // Fetch user profile to determine redirect target
           const { data: profile } = await supabase
             .from("profiles")
             .select("role")
@@ -121,7 +125,6 @@ function AuthContent() {
           return;
         }
 
-        // Student registration only
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -148,7 +151,6 @@ function AuthContent() {
         }
 
         if (data?.user) {
-          // Insert profile record explicitly
           await supabase.from("profiles").upsert({
             id: data.user.id,
             full_name: name.trim(),
@@ -167,6 +169,36 @@ function AuthContent() {
       setErrorMessage(err.message || "An unexpected error occurred during authentication.");
       setIsLoading(false);
       setIsRegisterSuccess(false);
+    }
+  };
+
+  const handleSendResetLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      setErrorMessage("Please enter your email address.");
+      return;
+    }
+    setIsResetSending(true);
+    setErrorMessage(null);
+    setResetSuccessMessage(null);
+
+    try {
+      const redirectUrl = typeof window !== "undefined" ? window.location.origin + "/auth/reset" : "";
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: redirectUrl,
+      });
+
+      if (error) {
+        setErrorMessage(error.message);
+      } else {
+        setResetSuccessMessage(
+          `A password reset link has been sent to ${email.trim()}. Please check your email inbox.`
+        );
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to send reset link.");
+    } finally {
+      setIsResetSending(false);
     }
   };
 
@@ -228,16 +260,77 @@ function AuthContent() {
 
           <div className="mb-6">
             <h1 className="text-3xl font-extrabold tracking-tight text-stone-900 dark:text-white">
-              {mode === "login" ? "Welcome back" : "Create account"}
+              {showForgotPassword
+                ? "Reset Password"
+                : mode === "login"
+                ? "Welcome back"
+                : "Create account"}
             </h1>
             <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
-              {mode === "login"
+              {showForgotPassword
+                ? "Enter your email address to receive a password reset link."
+                : mode === "login"
                 ? "Sign in to access your scholarship portal."
                 : "Register to discover government scholarships & fellowships."}
             </p>
           </div>
 
-          {isRegisterSuccess ? (
+          {/* Forgot Password Flow */}
+          {showForgotPassword ? (
+            <div className="space-y-4">
+              {errorMessage && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 flex items-start gap-2.5">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
+
+              {resetSuccessMessage && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300 flex items-start gap-2.5">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" />
+                  <span>{resetSuccessMessage}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSendResetLink} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
+                    Email address
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="h-11 w-full rounded-xl border border-stone-200 bg-white px-4 text-sm text-stone-900 placeholder:text-stone-400 focus:border-[#074635] focus:outline-none focus:ring-1 focus:ring-[#074635] dark:border-[#193c30] dark:bg-[#0f231c] dark:text-white"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isResetSending}
+                  className="flex h-12 w-full items-center justify-center rounded-xl bg-[#074635] px-4 text-sm font-semibold text-white shadow-md hover:bg-[#053628] transition-all disabled:opacity-60 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                >
+                  {isResetSending ? "Sending Reset Link..." : "Send Reset Link"}
+                </button>
+              </form>
+
+              <div className="pt-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForgotPassword(false);
+                    setErrorMessage(null);
+                    setResetSuccessMessage(null);
+                  }}
+                  className="text-xs font-semibold text-[#074635] hover:underline dark:text-emerald-400"
+                >
+                  ← Back to Sign In
+                </button>
+              </div>
+            </div>
+          ) : isRegisterSuccess ? (
             <div
               className="rounded-3xl p-8 shadow-xl text-center space-y-6 text-white"
               style={{
@@ -429,6 +522,30 @@ function AuthContent() {
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+
+                  {/* Forgot Password Link on Sign In form */}
+                  {mode === "login" && (
+                    <div style={{ textAlign: 'right', marginTop: '6px' }}>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setShowForgotPassword(true);
+                          setErrorMessage(null);
+                          setResetSuccessMessage(null);
+                        }}
+                        style={{ 
+                          background: 'none', 
+                          border: 'none', 
+                          color: '#666', 
+                          fontSize: '13px', 
+                          cursor: 'pointer',
+                          textDecoration: 'underline'
+                        }}
+                      >
+                        Forgot password?
+                      </button>
+                    </div>
+                  )}
 
                   {/* Password Strength Indicator on Register */}
                   {mode === "register" && password && (
