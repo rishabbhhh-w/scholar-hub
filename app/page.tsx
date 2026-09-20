@@ -74,8 +74,7 @@ export default function LandingPage() {
           .from("scholarships")
           .select("id, title, amount_monthly, deadline, category_eligible")
           .eq("status", "active")
-          .order("deadline", { ascending: true })
-          .limit(3);
+          .order("deadline", { ascending: true });
 
         if (!error && data && data.length > 0) {
           setHeroScholarships(data as HeroScholarship[]);
@@ -102,6 +101,20 @@ export default function LandingPage() {
               amount_monthly: 45000,
               deadline: "2026-10-30",
               category_eligible: ["ST", "OBC"],
+            },
+            {
+              id: "hero-4",
+              title: "Post-Doctoral Fellowship for ST",
+              amount_monthly: 47000,
+              deadline: "2026-11-10",
+              category_eligible: ["ST"],
+            },
+            {
+              id: "hero-5",
+              title: "Central Sector Scheme of Scholarships",
+              amount_monthly: 20000,
+              deadline: "2026-11-25",
+              category_eligible: ["General", "OBC"],
             },
           ]);
         }
@@ -159,6 +172,24 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[#fcfbf9] text-stone-900 dark:bg-[#07130e] dark:text-stone-100 selection:bg-emerald-200">
+      {/* Dynamic Keyframes for Marquee Ticker */}
+      <style jsx>{`
+        @keyframes scrollUp {
+          0% {
+            transform: translateY(0%);
+          }
+          100% {
+            transform: translateY(-50%);
+          }
+        }
+        .animate-ticker-up {
+          animation: scrollUp ${Math.max(16, heroScholarships.length * 4)}s linear infinite;
+        }
+        .animate-ticker-up:hover {
+          animation-play-state: paused;
+        }
+      `}</style>
+
       {/* Top Navbar */}
       <Navbar />
 
@@ -229,7 +260,7 @@ export default function LandingPage() {
             <div className="lg:col-span-5 flex justify-center lg:justify-end">
               <div className="w-full max-w-md rounded-3xl border border-stone-200/90 bg-white p-6 shadow-2xl shadow-stone-200/60 dark:border-[#193c30] dark:bg-[#0c1c16] dark:shadow-black/40">
                 {/* Header with Time-Based Greeting */}
-                <div className="mb-5">
+                <div className="mb-4">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-400">
                     STUDENT OVERVIEW
                   </span>
@@ -238,62 +269,67 @@ export default function LandingPage() {
                   </h3>
                 </div>
 
-                {/* 3 Real Active Scholarships List */}
-                <div className="space-y-3">
+                {/* Infinite Auto-Scrolling Marquee Container */}
+                <div className="relative h-[210px] overflow-hidden rounded-2xl border border-stone-200/90 bg-stone-50/40 dark:border-[#193c30] dark:bg-[#081510]">
                   {loadingHero ? (
-                    [1, 2, 3].map((i) => (
-                      <div
-                        key={i}
-                        className="rounded-2xl border border-stone-200/80 p-3.5 space-y-2 dark:border-[#193c30]"
-                      >
-                        <Skeleton className="h-4 w-3/4" />
-                        <div className="flex justify-between">
-                          <Skeleton className="h-3 w-1/3" />
-                          <Skeleton className="h-3 w-1/4" />
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    heroScholarships.map((s) => {
-                      const formattedDeadline = formatDeadline(s.deadline);
-                      const categoryTag = Array.isArray(s.category_eligible)
-                        ? s.category_eligible.join(" / ")
-                        : s.category_eligible || "ST / SC / OBC";
-
-                      return (
+                    <div className="p-3 space-y-2.5">
+                      {[1, 2, 3].map((i) => (
                         <div
-                          key={s.id}
-                          onClick={() => {
-                            setSelectedScholarship(s);
-                            setModalOpen(true);
-                          }}
-                          className="cursor-pointer rounded-2xl border border-stone-200/90 p-3.5 transition-all hover:border-emerald-600/40 hover:bg-stone-50/60 dark:border-[#193c30] dark:bg-[#0f231c] dark:hover:bg-[#132d23]"
+                          key={i}
+                          className="rounded-xl border border-stone-200/80 bg-white p-3 space-y-2 dark:border-[#193c30] dark:bg-[#0f231c]"
                         >
-                          <div className="flex items-center justify-between gap-2">
-                            <h4 className="truncate text-xs sm:text-sm font-bold text-stone-900 dark:text-stone-100">
-                              {s.title}
-                            </h4>
-                            <span className="shrink-0 rounded-md bg-stone-100 px-2 py-0.5 text-[10px] font-bold text-stone-700 dark:bg-[#153228] dark:text-stone-200 border border-stone-200 dark:border-[#193c30]">
-                              {categoryTag}
-                            </span>
-                          </div>
-
-                          <div className="mt-2 flex items-center justify-between text-xs">
-                            <span className="font-semibold text-[#064e3b] dark:text-emerald-400">
-                              ₹{(s.amount_monthly || 0).toLocaleString("en-IN")} / month
-                            </span>
-                            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
-                              Closes {formattedDeadline}
-                            </span>
+                          <Skeleton className="h-4 w-3/4" />
+                          <div className="flex justify-between">
+                            <Skeleton className="h-3 w-1/3" />
+                            <Skeleton className="h-3 w-1/4" />
                           </div>
                         </div>
-                      );
-                    })
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="animate-ticker-up flex flex-col space-y-2.5 p-3">
+                      {/* Duplicated list to form seamless infinite loop */}
+                      {[...heroScholarships, ...heroScholarships].map((s, index) => {
+                        const formattedDeadline = formatDeadline(s.deadline);
+                        const categoryTag = Array.isArray(s.category_eligible)
+                          ? s.category_eligible.join(" / ")
+                          : s.category_eligible || "ST / SC / OBC";
+
+                        return (
+                          <div
+                            key={`${s.id}-${index}`}
+                            onClick={() => {
+                              setSelectedScholarship(s);
+                              setModalOpen(true);
+                            }}
+                            className="cursor-pointer shrink-0 rounded-xl border border-stone-200/90 bg-white p-3.5 transition-all hover:border-emerald-600/40 hover:bg-stone-50/90 dark:border-[#193c30] dark:bg-[#0f231c] dark:hover:bg-[#132d23]"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <h4 className="truncate text-xs sm:text-sm font-bold text-stone-900 dark:text-stone-100">
+                                {s.title}
+                              </h4>
+                              <span className="shrink-0 rounded-md bg-stone-100 px-2 py-0.5 text-[10px] font-bold text-stone-700 dark:bg-[#153228] dark:text-stone-200 border border-stone-200 dark:border-[#193c30]">
+                                {categoryTag}
+                              </span>
+                            </div>
+
+                            <div className="mt-2 flex items-center justify-between text-xs">
+                              <span className="font-semibold text-[#064e3b] dark:text-emerald-400">
+                                ₹{(s.amount_monthly || 0).toLocaleString("en-IN")} / month
+                              </span>
+                              <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
+                                Closes {formattedDeadline}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
 
                 {/* Soft Highlighted Box Below */}
-                <div className="mt-5 rounded-2xl bg-[#eaf5ea] p-4 border border-[#d2ebd2] dark:bg-[#0f281e] dark:border-[#193c30]">
+                <div className="mt-4 rounded-2xl bg-[#eaf5ea] p-4 border border-[#d2ebd2] dark:bg-[#0f281e] dark:border-[#193c30]">
                   <h4 className="text-xs font-bold text-[#064e3b] dark:text-emerald-300">
                     Want to check your eligibility?
                   </h4>
