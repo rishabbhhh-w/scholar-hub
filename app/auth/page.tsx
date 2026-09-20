@@ -47,14 +47,15 @@ function AuthContent() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
-  const [category, setCategory] = useState("ST");
+  const [category, setCategory] = useState("");
   const [stateName, setStateName] = useState("");
-  const [institution, setInstitution] = useState("Central University of Jharkhand");
+  const [institution, setInstitution] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRegisterSuccess, setIsRegisterSuccess] = useState(false);
   const [isAdminLogin, setIsAdminLogin] = useState(false);
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
 
   // Forgot password states
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -73,12 +74,19 @@ function AuthContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAttemptedSubmit(true);
     setIsLoading(true);
     setErrorMessage(null);
     setIsRegisterSuccess(false);
 
     try {
       if (mode === "login") {
+        if (!email.trim() || !password) {
+          setErrorMessage("Please fill in all mandatory fields.");
+          setIsLoading(false);
+          return;
+        }
+
         const { data, error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password,
@@ -112,7 +120,21 @@ function AuthContent() {
           router.refresh();
         }
       } else {
-        // Register Validation
+        // Register Mandatory Field Validation
+        if (
+          !name.trim() ||
+          !category ||
+          !stateName ||
+          !institution.trim() ||
+          !email.trim() ||
+          !password ||
+          !confirmPassword
+        ) {
+          setErrorMessage("Please complete all mandatory fields marked with an asterisk (*).");
+          setIsLoading(false);
+          return;
+        }
+
         if (password !== confirmPassword) {
           setErrorMessage("Passwords do not match. Please ensure both fields are identical.");
           setIsLoading(false);
@@ -295,11 +317,10 @@ function AuthContent() {
               <form onSubmit={handleSendResetLink} className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
-                    Email address
+                    Email address *
                   </label>
                   <input
                     type="email"
-                    required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
@@ -368,6 +389,7 @@ function AuthContent() {
                     setErrorMessage(null);
                     setPassword("");
                     setConfirmPassword("");
+                    setAttemptedSubmit(false);
                   }}
                   className="w-full h-12 rounded-xl text-sm font-semibold text-white transition-all shadow-md hover:bg-[#053d2e] active:scale-[0.99]"
                   style={{ backgroundColor: "#064e3b" }}
@@ -385,6 +407,7 @@ function AuthContent() {
                   onClick={() => {
                     setMode("login");
                     setErrorMessage(null);
+                    setAttemptedSubmit(false);
                   }}
                   className={`rounded-xl py-2.5 text-xs sm:text-sm font-semibold transition-all duration-200 ${
                     mode === "login"
@@ -399,6 +422,7 @@ function AuthContent() {
                   onClick={() => {
                     setMode("register");
                     setErrorMessage(null);
+                    setAttemptedSubmit(false);
                   }}
                   className={`rounded-xl py-2.5 text-xs sm:text-sm font-semibold transition-all duration-200 ${
                     mode === "register"
@@ -419,52 +443,80 @@ function AuthContent() {
               )}
 
               {/* Form Fields */}
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} noValidate className="space-y-4">
                 {mode === "register" && (
                   <>
+                    {/* Full Name */}
                     <div>
                       <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
-                        Full Name
+                        Full Name *
                       </label>
                       <input
                         type="text"
-                        required
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="e.g. Full Name"
-                        className="h-11 w-full rounded-xl border border-stone-200 bg-white px-4 text-sm text-stone-900 placeholder:text-stone-400 focus:border-[#074635] focus:outline-none focus:ring-1 focus:ring-[#074635] dark:border-[#193c30] dark:bg-[#0f231c] dark:text-white"
+                        className={`h-11 w-full rounded-xl border bg-white px-4 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-1 dark:bg-[#0f231c] dark:text-white ${
+                          attemptedSubmit && !name.trim()
+                            ? "border-rose-500 dark:border-rose-500 focus:border-rose-500 focus:ring-rose-500"
+                            : "border-stone-200 focus:border-[#074635] focus:ring-[#074635] dark:border-[#193c30]"
+                        }`}
                       />
+                      {attemptedSubmit && !name.trim() && (
+                        <p className="text-[11px] font-medium text-rose-500 mt-1">
+                          This field is required
+                        </p>
+                      )}
                     </div>
 
+                    {/* Social Category & Domicile State */}
                     <div className="grid grid-cols-2 gap-3">
+                      {/* Social Category */}
                       <div>
                         <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
-                          Social Category
+                          Social Category *
                         </label>
                         <select
                           value={category}
                           onChange={(e) => setCategory(e.target.value)}
-                          className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-900 focus:border-[#074635] focus:outline-none focus:ring-1 focus:ring-[#074635] dark:border-[#193c30] dark:bg-[#0f231c] dark:text-white"
-                        >
-                          <option value="ST">Scheduled Tribe (ST)</option>
-                          <option value="SC">Scheduled Caste (SC)</option>
-                          <option value="OBC">Other Backward Class</option>
-                          <option value="General">General / EWS</option>
-                          <option value="Minority">Minority Community</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
-                          Domicile State
-                        </label>
-                        <select
-                          required
-                          value={stateName}
-                          onChange={(e) => setStateName(e.target.value)}
-                          className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-900 focus:border-[#074635] focus:outline-none focus:ring-1 focus:ring-[#074635] dark:border-[#193c30] dark:bg-[#0f231c] dark:text-white"
+                          className={`h-11 w-full rounded-xl border bg-white px-3 text-sm text-stone-900 focus:outline-none focus:ring-1 dark:bg-[#0f231c] dark:text-white ${
+                            attemptedSubmit && !category
+                              ? "border-rose-500 dark:border-rose-500 focus:border-rose-500 focus:ring-rose-500"
+                              : "border-stone-200 focus:border-[#074635] focus:ring-[#074635] dark:border-[#193c30]"
+                          }`}
                         >
                           <option value="" disabled>
-                            Select your state
+                            Select category *
+                          </option>
+                          <option value="ST">Scheduled Tribe (ST)</option>
+                          <option value="SC">Scheduled Caste (SC)</option>
+                          <option value="OBC">Other Backward Class (OBC)</option>
+                          <option value="General">General / EWS</option>
+                          <option value="Minority">Minority</option>
+                        </select>
+                        {attemptedSubmit && !category && (
+                          <p className="text-[11px] font-medium text-rose-500 mt-1">
+                            This field is required
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Domicile State */}
+                      <div>
+                        <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
+                          Domicile State *
+                        </label>
+                        <select
+                          value={stateName}
+                          onChange={(e) => setStateName(e.target.value)}
+                          className={`h-11 w-full rounded-xl border bg-white px-3 text-sm text-stone-900 focus:outline-none focus:ring-1 dark:bg-[#0f231c] dark:text-white ${
+                            attemptedSubmit && !stateName
+                              ? "border-rose-500 dark:border-rose-500 focus:border-rose-500 focus:ring-rose-500"
+                              : "border-stone-200 focus:border-[#074635] focus:ring-[#074635] dark:border-[#193c30]"
+                          }`}
+                        >
+                          <option value="" disabled>
+                            Select state *
                           </option>
                           <option value="Andhra Pradesh">Andhra Pradesh</option>
                           <option value="Arunachal Pradesh">Arunachal Pradesh</option>
@@ -503,21 +555,35 @@ function AuthContent() {
                           <option value="Lakshadweep">Lakshadweep</option>
                           <option value="Puducherry">Puducherry</option>
                         </select>
+                        {attemptedSubmit && !stateName && (
+                          <p className="text-[11px] font-medium text-rose-500 mt-1">
+                            This field is required
+                          </p>
+                        )}
                       </div>
                     </div>
 
+                    {/* Institution / University */}
                     <div>
                       <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
-                        Institution / University
+                        Institution / University *
                       </label>
                       <input
                         type="text"
-                        required
                         value={institution}
                         onChange={(e) => setInstitution(e.target.value)}
-                        placeholder="e.g. Central University of Jharkhand"
-                        className="h-11 w-full rounded-xl border border-stone-200 bg-white px-4 text-sm text-stone-900 placeholder:text-stone-400 focus:border-[#074635] focus:outline-none focus:ring-1 focus:ring-[#074635] dark:border-[#193c30] dark:bg-[#0f231c] dark:text-white"
+                        placeholder="Enter your institution / university name"
+                        className={`h-11 w-full rounded-xl border bg-white px-4 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-1 dark:bg-[#0f231c] dark:text-white ${
+                          attemptedSubmit && !institution.trim()
+                            ? "border-rose-500 dark:border-rose-500 focus:border-rose-500 focus:ring-rose-500"
+                            : "border-stone-200 focus:border-[#074635] focus:ring-[#074635] dark:border-[#193c30]"
+                        }`}
                       />
+                      {attemptedSubmit && !institution.trim() && (
+                        <p className="text-[11px] font-medium text-rose-500 mt-1">
+                          This field is required
+                        </p>
+                      )}
                     </div>
                   </>
                 )}
@@ -525,31 +591,42 @@ function AuthContent() {
                 {/* Email Address */}
                 <div>
                   <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
-                    Email address
+                    Email address *
                   </label>
                   <input
                     type="email"
-                    required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
-                    className="h-11 w-full rounded-xl border border-stone-200 bg-white px-4 text-sm text-stone-900 placeholder:text-stone-400 focus:border-[#074635] focus:outline-none focus:ring-1 focus:ring-[#074635] dark:border-[#193c30] dark:bg-[#0f231c] dark:text-white"
+                    className={`h-11 w-full rounded-xl border bg-white px-4 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-1 dark:bg-[#0f231c] dark:text-white ${
+                      attemptedSubmit && !email.trim()
+                        ? "border-rose-500 dark:border-rose-500 focus:border-rose-500 focus:ring-rose-500"
+                        : "border-stone-200 focus:border-[#074635] focus:ring-[#074635] dark:border-[#193c30]"
+                    }`}
                   />
+                  {attemptedSubmit && !email.trim() && (
+                    <p className="text-[11px] font-medium text-rose-500 mt-1">
+                      This field is required
+                    </p>
+                  )}
                 </div>
 
                 {/* Password */}
                 <div>
                   <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
-                    Password
+                    Password *
                   </label>
                   <div className="relative">
                     <input
                       type={showPassword ? "text" : "password"}
-                      required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Minimum 8 characters"
-                      className="h-11 w-full rounded-xl border border-stone-200 bg-white px-4 pr-11 text-sm text-stone-900 placeholder:text-stone-400 focus:border-[#074635] focus:outline-none focus:ring-1 focus:ring-[#074635] dark:border-[#193c30] dark:bg-[#0f231c] dark:text-white"
+                      className={`h-11 w-full rounded-xl border bg-white px-4 pr-11 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-1 dark:bg-[#0f231c] dark:text-white ${
+                        attemptedSubmit && !password
+                          ? "border-rose-500 dark:border-rose-500 focus:border-rose-500 focus:ring-rose-500"
+                          : "border-stone-200 focus:border-[#074635] focus:ring-[#074635] dark:border-[#193c30]"
+                      }`}
                     />
                     <button
                       type="button"
@@ -560,24 +637,29 @@ function AuthContent() {
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+                  {attemptedSubmit && !password && (
+                    <p className="text-[11px] font-medium text-rose-500 mt-1">
+                      This field is required
+                    </p>
+                  )}
 
                   {/* Forgot Password Link on Sign In form */}
                   {mode === "login" && (
-                    <div style={{ textAlign: 'right', marginTop: '6px' }}>
-                      <button 
+                    <div style={{ textAlign: "right", marginTop: "6px" }}>
+                      <button
                         type="button"
                         onClick={() => {
                           setShowForgotPassword(true);
                           setErrorMessage(null);
                           setResetSuccessMessage(null);
                         }}
-                        style={{ 
-                          background: 'none', 
-                          border: 'none', 
-                          color: '#666', 
-                          fontSize: '13px', 
-                          cursor: 'pointer',
-                          textDecoration: 'underline'
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#666",
+                          fontSize: "13px",
+                          cursor: "pointer",
+                          textDecoration: "underline",
                         }}
                       >
                         Forgot password?
@@ -606,21 +688,32 @@ function AuthContent() {
                 {mode === "register" && (
                   <div>
                     <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
-                      Confirm Password
+                      Confirm Password *
                     </label>
                     <input
                       type={showPassword ? "text" : "password"}
-                      required
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Re-enter password"
                       className={`h-11 w-full rounded-xl border bg-white px-4 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-1 dark:bg-[#0f231c] dark:text-white ${
-                        confirmPassword && confirmPassword !== password
-                          ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500"
+                        attemptedSubmit && (!confirmPassword || confirmPassword !== password)
+                          ? "border-rose-500 dark:border-rose-500 focus:border-rose-500 focus:ring-rose-500"
                           : "border-stone-200 focus:border-[#074635] focus:ring-[#074635] dark:border-[#193c30]"
                       }`}
                     />
+                    {attemptedSubmit && !confirmPassword && (
+                      <p className="text-[11px] font-medium text-rose-500 mt-1">
+                        This field is required
+                      </p>
+                    )}
                   </div>
+                )}
+
+                {/* Mandatory Note */}
+                {mode === "register" && (
+                  <p className="text-xs text-stone-400 dark:text-stone-500 pt-1">
+                    * All fields are mandatory
+                  </p>
                 )}
 
                 {/* Submit Button */}
