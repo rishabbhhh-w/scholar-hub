@@ -41,8 +41,7 @@ function getGreeting(): string {
   const hour = new Date().getHours();
   if (hour >= 5 && hour < 12) return "Good morning, Scholar";
   if (hour >= 12 && hour < 17) return "Good afternoon, Scholar";
-  if (hour >= 17 && hour < 21) return "Good evening, Scholar";
-  return "Good night, Scholar";
+  return "Good evening, Scholar";
 }
 
 function formatDeadline(dateStr: string): string {
