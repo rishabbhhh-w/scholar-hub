@@ -68,13 +68,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No valid user messages provided." }, { status: 400 });
     }
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const endpoint = "https://us-central1-aiplatform.googleapis.com/v1/projects/669956117790/locations/us-central1/publishers/google/models/gemini-1.5-flash:generateContent";
 
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
       },
       body: JSON.stringify({
         system_instruction: {
