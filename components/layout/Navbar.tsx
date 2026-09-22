@@ -37,13 +37,6 @@ export function Navbar() {
           >
             Impact
           </a>
-          <Link
-            href="/assistant"
-            className="flex items-center gap-1.5 transition-colors hover:text-[#064e3b] dark:hover:text-emerald-400"
-          >
-            <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            <span>Scholar AI</span>
-          </Link>
         </nav>
 
         {/* Right CTA Actions - Replicating Image 1 */}
@@ -119,13 +112,6 @@ export function Navbar() {
             >
               Impact
             </a>
-            <Link
-              href="/assistant"
-              onClick={() => setMobileMenuOpen(false)}
-              className="px-3 py-2 text-base font-medium text-emerald-700 dark:text-emerald-400 flex items-center gap-2"
-            >
-              <Sparkles className="h-4 w-4" /> Scholar AI Assistant
-            </Link>
             <div className="flex flex-col gap-2 pt-4 border-t border-stone-200 dark:border-[#193c30]">
               <Link href="/auth?mode=login" onClick={() => setMobileMenuOpen(false)}>
                 <Button variant="secondary" className="w-full justify-center">

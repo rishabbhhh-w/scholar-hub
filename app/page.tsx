@@ -25,7 +25,6 @@ import { SCHOLARSHIPS } from "@/lib/data/scholarships";
 import { ScholarshipCard } from "@/components/shared/ScholarshipCard";
 import { Logo } from "@/components/shared/Logo";
 import { DetailModal } from "@/components/shared/DetailModal";
-import { SarthiChatWidget } from "@/components/shared/SarthiChatWidget";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/client";
 
@@ -156,8 +155,8 @@ export default function LandingPage() {
       a: "Any candidate belonging to a notified Scheduled Tribe (ST) category who has secured admission to regular and full-time M.Phil or Ph.D. degrees in a UGC-recognized university is eligible. Annual family income must not exceed ₹6.0 Lakhs.",
     },
     {
-      q: "How does the Scholar AI Matching algorithm work?",
-      a: "Scholar AI evaluates your demographic profile, state domicile, community category, parent income, and current degree against over 140 central and state affirmative action schemes to calculate match percentages and identify missing documents.",
+      q: "How does the Scholarship Matching algorithm work?",
+      a: "Scholar Hub evaluates your demographic profile, state domicile, community category, parent income, and current degree against over 140 central and state affirmative action schemes to calculate match percentages and identify missing documents.",
     },
     {
       q: "Is there any charge for students using Scholar Hub?",
@@ -462,8 +461,8 @@ export default function LandingPage() {
               },
               {
                 step: "02",
-                title: "Instant AI Matching",
-                desc: "Scholar AI maps criteria across 140+ schemes, highlighting highest awards & deadlines.",
+                title: "Instant Smart Matching",
+                desc: "Scholar Hub maps criteria across 140+ schemes, highlighting highest awards & deadlines.",
               },
               {
                 step: "03",
@@ -594,9 +593,6 @@ export default function LandingPage() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
       />
-
-      {/* Sarthi AI Chat */}
-      <SarthiChatWidget />
     </div>
   );
 }

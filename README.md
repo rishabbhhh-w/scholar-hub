@@ -13,7 +13,6 @@
 - **My Documents Vault (`/documents`)**: Secure document storage for income certificates, caste certificates, marksheets, and identity proofs.
 - **Applications & Tracking (`/applications`)**: Live tracking numbers (`NSH-2026-XXXXXX`), approval stages, and status updates.
 - **Notifications Center (`/notifications`)**: Deadline advisories, verification alerts, and direct benefit disbursement notices.
-- **Scholar AI Assistant (`/assistant`)**: Intelligent scholarship advisor powered by **Google Gemini 1.5 Flash API** answering queries in English & Hinglish.
 
 ### 🛡️ Nodal Officer Portal (`/admin`)
 - **Admin Dashboard (`/admin`)**: Real-time statistics (*Total Applications*, *Pending Review*, *Approved This Month*, *Total Students Registered*).
@@ -31,7 +30,6 @@
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/)
 - **Icons**: [Lucide React](https://lucide.dev/)
 - **Database & Auth**: [Supabase](https://supabase.com/) (PostgreSQL, RLS Policies, Auth, Storage)
-- **AI Model**: [Google Gemini 1.5 Flash API](https://ai.google.dev/)
 - **Deployment**: [Vercel](https://vercel.com/)
 
 ---
@@ -44,19 +42,16 @@ scholar-hub/
 │   ├── (dashboard)/
 │   │   ├── admin/               # Nodal Officer routes (/admin, /admin/applications, etc.)
 │   │   ├── applications/        # Student application tracking
-│   │   ├── assistant/           # Scholar AI Assistant (Gemini API)
 │   │   ├── dashboard/           # Student space overview
 │   │   ├── documents/           # Document vault
 │   │   ├── eligibility/         # Eligibility checker
-│   │   ├── notifications/       # Student notifications center
-│   │   ├── recommendations/     # AI recommendation engine
-│   │   └── scholarships/        # Scholarship discovery list
-│   ├── api/
-│   │   └── chat/                # Gemini 1.5 Flash streaming/JSON API route
-│   ├── auth/                    # Auth page (Student register & discreet Admin login)
-│   ├── globals.css              # Global styles & theme definitions
-│   ├── layout.tsx               # Root layout
-│   └── page.tsx                 # Public landing page
+│   │   ├── notifications/       # Student notifications
+│   │   ├── recommendations/     # Smart recommendations
+│   │   └── scholarships/        # Scholarship discovery
+│   ├── api/                     # API routes
+│   ├── auth/                    # Sign in & register
+│   ├── layout.tsx
+│   └── page.tsx                 # Landing page
 ├── components/
 │   ├── layout/                  # Sidebar & Header components
 │   ├── shared/                  # Reusable UI widgets & modals

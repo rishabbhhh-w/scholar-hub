@@ -12,7 +12,6 @@ const PROTECTED_ROUTES = [
   "/recommendations",
   "/eligibility",
   "/notifications",
-  "/assistant",
 ];
 
 export async function middleware(request: NextRequest) {

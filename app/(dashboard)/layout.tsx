@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
-import { SarthiChatWidget } from "@/components/shared/SarthiChatWidget";
 import { OfflineBanner } from "@/components/shared/OfflineBanner";
 
 export default function DashboardLayout({
@@ -46,9 +45,6 @@ export default function DashboardLayout({
           <div className="mx-auto max-w-7xl">{children}</div>
         </main>
       </div>
-
-      {/* Floating Sarthi AI Assistant */}
-      <SarthiChatWidget />
     </div>
   );
 }

@@ -87,7 +87,7 @@ export default function AIRecommendationsPage() {
         "Valid passport with minimum 2-year validity required",
       ],
       aiAdvice:
-        "Prepare for the upcoming foreign university cycle. Sarthi AI can review your Statement of Purpose (SOP).",
+        "Prepare for the upcoming foreign university cycle. Ensure your Statement of Purpose (SOP) is ready.",
     },
   ];
 
@@ -99,13 +99,13 @@ export default function AIRecommendationsPage() {
           <div className="space-y-2 max-w-2xl">
             <div className="inline-flex items-center gap-1.5 rounded-full bg-[#064e3b] px-3 py-1 text-xs font-semibold text-white dark:bg-emerald-600">
               <Sparkles className="h-3.5 w-3.5" />
-              <span>Sarthi AI Neural Matcher 2.0</span>
+              <span>Smart Neural Matcher 2.0</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-[#064e3b] dark:text-emerald-300">
               Personalized Scholarship Recommendations
             </h2>
             <p className="text-xs sm:text-sm text-stone-700 dark:text-stone-300 leading-relaxed">
-              Based on your verified student profile (ST, Jharkhand, Ph.D. in Tribal Studies, ₹1.8 LPA Income), Sarthi AI evaluated 142 schemes to find your highest funding potentials.
+              Based on your verified student profile (ST, Jharkhand, Ph.D. in Tribal Studies, ₹1.8 LPA Income), Scholar Hub evaluated 142 schemes to find your highest funding potentials.
             </p>
           </div>
 
@@ -203,9 +203,9 @@ export default function AIRecommendationsPage() {
                   ))}
                 </div>
 
-                {/* AI Advice Callout */}
+                {/* Advice Callout */}
                 <div className="rounded-xl bg-[#eaf5ea] p-3 text-xs text-[#064e3b] dark:bg-emerald-950/60 dark:text-emerald-300">
-                  <span className="font-bold">Sarthi AI Insight: </span>
+                  <span className="font-bold">Match Insight: </span>
                   {rec.aiAdvice}
                 </div>
               </div>

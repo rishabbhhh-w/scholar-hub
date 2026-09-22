@@ -35,7 +35,7 @@ export const NOTIFICATIONS: NotificationItem[] = [
   },
   {
     id: "notif-3",
-    title: "New 96% Match Found by Sarthi AI",
+    title: "New 96% Match Found",
     description: "A new fellowship cycle opened for Tribal Scholars in Higher Education. You meet all 5 criteria.",
     timeAgo: "1 day ago",
     category: "ai_recommendation",

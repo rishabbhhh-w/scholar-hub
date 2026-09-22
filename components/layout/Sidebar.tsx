@@ -12,7 +12,6 @@ import {
   FileText,
   Clock,
   Bell,
-  Bot,
   ShieldCheck,
   LogOut,
   FileCheck,
@@ -83,11 +82,6 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
       icon: Bell,
       badge: profile.unreadCount > 0 ? `${profile.unreadCount} unread` : undefined,
       badgeColor: "rose",
-    },
-    {
-      label: "Scholar AI",
-      href: "/assistant",
-      icon: Bot,
     },
   ];
 
