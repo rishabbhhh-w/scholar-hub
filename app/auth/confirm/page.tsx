@@ -2,110 +2,133 @@
 
 import React, { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Check, X, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/shared/Logo";
 
 function ConfirmContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
+    let redirectTimer: NodeJS.Timeout;
+
+    const handleRedirect = () => {
+      redirectTimer = setTimeout(() => {
+        if (isMounted) {
+          router.push("/dashboard");
+        }
+      }, 2000);
+    };
 
     const confirmEmail = async () => {
       try {
         const supabase = createClient();
 
-        // 1. Extract query parameters
+        // 1. First check if user already has an active session
+        const {
+          data: { session: initialSession },
+        } = await supabase.auth.getSession();
+
+        if (initialSession) {
+          if (isMounted) {
+            setStatus("success");
+            handleRedirect();
+          }
+          return;
+        }
+
+        // 2. Check for access_token in URL hash (#access_token=...&refresh_token=...)
+        const hash = typeof window !== "undefined" ? window.location.hash : "";
+        if (hash) {
+          const hashParams = new URLSearchParams(hash.replace(/^#/, ""));
+          const accessToken = hashParams.get("access_token");
+          const refreshToken = hashParams.get("refresh_token");
+
+          if (accessToken) {
+            const { data: setSessionData, error: setSessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken || "",
+            });
+
+            if (!setSessionError && setSessionData?.session) {
+              if (isMounted) {
+                setStatus("success");
+                handleRedirect();
+              }
+              return;
+            }
+          }
+        }
+
+        // 3. Extract query parameters from URL
         const code = searchParams.get("code");
         const tokenHash = searchParams.get("token_hash");
         const type = (searchParams.get("type") as any) || "signup";
 
-        // 2. Extract hash parameters (e.g. #error=... or #access_token=...)
-        const hash = typeof window !== "undefined" ? window.location.hash : "";
-        const hashParams = new URLSearchParams(hash.replace(/^#/, ""));
-        const hashError = hashParams.get("error_description") || hashParams.get("error");
-
-        if (hashError) {
-          if (isMounted) {
-            setErrorMessage(decodeURIComponent(hashError));
-            setStatus("error");
-          }
-          return;
-        }
-
-        // Exchange PKCE code if present in URL
+        // Exchange PKCE code if present
         if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) {
+          const { error: codeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (!codeError) {
             if (isMounted) {
-              setErrorMessage(error.message);
-              setStatus("error");
+              setStatus("success");
+              handleRedirect();
             }
             return;
           }
-          if (isMounted) setStatus("success");
-          return;
         }
 
-        // Verify token_hash if present in URL
+        // Verify token_hash if present
         if (tokenHash) {
-          const { error } = await supabase.auth.verifyOtp({
+          const { error: tokenError } = await supabase.auth.verifyOtp({
             token_hash: tokenHash,
             type: type === "recovery" ? "recovery" : type === "email" ? "email" : "signup",
           });
-          if (error) {
+          if (!tokenError) {
             if (isMounted) {
-              setErrorMessage(error.message);
-              setStatus("error");
+              setStatus("success");
+              handleRedirect();
             }
             return;
           }
-          if (isMounted) setStatus("success");
-          return;
         }
 
-        // Check if user session already verified / active
+        // 4. Check session again after attempting token verification
         const {
-          data: { session },
+          data: { session: postSession },
         } = await supabase.auth.getSession();
-        if (session) {
-          if (isMounted) setStatus("success");
+
+        if (postSession) {
+          if (isMounted) {
+            setStatus("success");
+            handleRedirect();
+          }
           return;
         }
 
-        // Listen for auth state change
-        const {
-          data: { subscription },
-        } = supabase.auth.onAuthStateChange((event, session) => {
-          if (event === "SIGNED_IN" || session) {
-            if (isMounted) setStatus("success");
-          }
-        });
-
-        // 2.5 second fallback timer
-        const timer = setTimeout(() => {
-          subscription.unsubscribe();
-          supabase.auth.getSession().then(({ data }) => {
-            if (data.session) {
-              if (isMounted) setStatus("success");
-            } else {
-              if (isMounted) setStatus("error");
-            }
-          });
-        }, 2500);
-
-        return () => {
-          clearTimeout(timer);
-          subscription.unsubscribe();
-        };
-      } catch (err: any) {
+        // 5. If token verification fails AND no session exists -> show error state
         if (isMounted) {
-          setErrorMessage(err?.message || "An error occurred during verification.");
+          setErrorMessage("This link may have expired. Please register again.");
           setStatus("error");
+        }
+      } catch (err: any) {
+        // Defensive check: if session exists despite error, show success
+        const supabase = createClient();
+        const { data } = await supabase.auth.getSession();
+        if (data?.session) {
+          if (isMounted) {
+            setStatus("success");
+            handleRedirect();
+          }
+        } else {
+          if (isMounted) {
+            setErrorMessage(err?.message || "This link may have expired. Please register again.");
+            setStatus("error");
+          }
         }
       }
     };
@@ -114,8 +137,9 @@ function ConfirmContent() {
 
     return () => {
       isMounted = false;
+      if (redirectTimer) clearTimeout(redirectTimer);
     };
-  }, [searchParams]);
+  }, [searchParams, router]);
 
   return (
     <div className="min-h-screen w-full bg-[#053225] flex flex-col items-center justify-center p-4 sm:p-6 text-white select-none">
@@ -160,18 +184,18 @@ function ConfirmContent() {
                   Email Confirmed!
                 </h1>
                 <p className="text-sm text-emerald-100/90 leading-relaxed max-w-xs mx-auto">
-                  Your account has been verified successfully. You can now sign in to Scholar Hub.
+                  Your account is verified. Redirecting to dashboard...
                 </p>
               </div>
 
               {/* Action Button */}
               <div className="pt-2">
-                <Link href="/auth">
+                <Link href="/dashboard">
                   <button
                     type="button"
                     className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm shadow-lg transition-all active:scale-[0.99] flex items-center justify-center gap-2"
                   >
-                    Sign in now
+                    Go to Dashboard
                   </button>
                 </Link>
               </div>
@@ -193,7 +217,7 @@ function ConfirmContent() {
                   Confirmation Failed
                 </h1>
                 <p className="text-sm text-rose-200/90 leading-relaxed max-w-xs mx-auto">
-                  This link may have expired. Please register again.
+                  {errorMessage || "This link may have expired. Please register again."}
                 </p>
               </div>
 
