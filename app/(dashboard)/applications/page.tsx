@@ -16,7 +16,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/shared/Toast";
 import { applyToScholarship } from "@/lib/services/applications";
-import { SCHOLARSHIPS } from "@/lib/data/scholarships";
 
 function formatSubmittedDate(dateStr: string | null | undefined): string {
   if (!dateStr || !dateStr.trim()) return "Recently submitted";
@@ -80,12 +79,7 @@ export default function ApplicationsTrackingPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [newAppModalOpen, setNewAppModalOpen] = useState(false);
-  const defaultModalSchemes = SCHOLARSHIPS.map((s) => ({
-    id: s.id,
-    title: s.title,
-    amount_monthly: s.amount,
-  }));
-  const [availableScholarships, setAvailableScholarships] = useState<any[]>(defaultModalSchemes);
+  const [availableScholarships, setAvailableScholarships] = useState<any[]>([]);
   const [selectedScholarshipId, setSelectedScholarshipId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -188,11 +182,9 @@ export default function ApplicationsTrackingPage() {
             title: s.title,
             amount_monthly: Number(s.amount_monthly || s.amount || 10000),
           }));
-          const dbIds = new Set(dbList.map((item: any) => item.id));
-          const remainingStatic = defaultModalSchemes.filter((s) => !dbIds.has(s.id));
-          setAvailableScholarships([...dbList, ...remainingStatic]);
+          setAvailableScholarships(dbList);
         } else {
-          setAvailableScholarships(defaultModalSchemes);
+          setAvailableScholarships([]);
         }
       }
     } catch (err) {

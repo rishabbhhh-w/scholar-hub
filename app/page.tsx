@@ -21,7 +21,7 @@ import {
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { SCHOLARSHIPS, Scholarship } from "@/lib/data/scholarships";
+import { Scholarship } from "@/lib/data/scholarships";
 import { ScholarshipCard } from "@/components/shared/ScholarshipCard";
 import { Logo } from "@/components/shared/Logo";
 import { DetailModal } from "@/components/shared/DetailModal";
@@ -58,8 +58,9 @@ export default function LandingPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [faqOpen, setFaqOpen] = useState<number | null>(0);
 
-  // Hero Card Real Supabase Scholarships State
+  // Hero Card & Featured Opportunities Real Supabase Scholarships State
   const [heroScholarships, setHeroScholarships] = useState<HeroScholarship[]>([]);
+  const [featuredScholarships, setFeaturedScholarships] = useState<Scholarship[]>([]);
   const [loadingHero, setLoadingHero] = useState(true);
 
   const supabase = createClient();
@@ -70,77 +71,67 @@ export default function LandingPage() {
       try {
         const { data, error } = await supabase
           .from("scholarships")
-          .select("id, title, amount_monthly, deadline, category_eligible")
+          .select("*")
           .eq("status", "active")
           .order("deadline", { ascending: true });
 
         if (!error && data && data.length > 0) {
-          setHeroScholarships(data as HeroScholarship[]);
-        } else {
-          // Graceful fallback if database empty or fetch fails
-          setHeroScholarships([
-            {
-              id: "hero-1",
-              title: "National Fellowship for ST Students",
-              amount_monthly: 37000,
-              deadline: "2026-09-28",
-              category_eligible: ["ST"],
-            },
-            {
-              id: "hero-2",
-              title: "Post-Matric Scholarship for ST/SC",
-              amount_monthly: 12000,
-              deadline: "2026-10-15",
-              category_eligible: ["ST", "SC"],
-            },
-            {
-              id: "hero-3",
-              title: "National Overseas Scholarship",
-              amount_monthly: 45000,
-              deadline: "2026-10-30",
-              category_eligible: ["ST", "OBC"],
-            },
-            {
-              id: "hero-4",
-              title: "Post-Doctoral Fellowship for ST",
-              amount_monthly: 47000,
-              deadline: "2026-11-10",
-              category_eligible: ["ST"],
-            },
-            {
-              id: "hero-5",
-              title: "Central Sector Scheme of Scholarships",
-              amount_monthly: 20000,
-              deadline: "2026-11-25",
-              category_eligible: ["General", "OBC"],
-            },
-          ]);
+          const heroList: HeroScholarship[] = data.map((item: any) => ({
+            id: item.id,
+            title: item.title,
+            amount_monthly: Number(item.amount_monthly || item.amount || 10000),
+            deadline: item.deadline,
+            category_eligible: item.category_eligible,
+          }));
+          setHeroScholarships(heroList);
+
+          const fullList: Scholarship[] = data.map((item: any) => {
+            const eligibleArray: string[] = Array.isArray(item.category_eligible)
+              ? item.category_eligible
+              : typeof item.category_eligible === "string"
+              ? item.category_eligible.replace(/[{}]/g, "").split(",")
+              : ["ST", "SC", "OBC", "General"];
+
+            return {
+              id: item.id,
+              slug: item.id,
+              title: item.title,
+              ministry: item.ministry || "Ministry of Tribal Affairs & Government of India",
+              category: (eligibleArray[0] as any) || "ST",
+              educationLevel:
+                item.level === "PhD"
+                  ? "Ph.D. / Fellowship"
+                  : (item.level as any) || "Post-Matric",
+              matchScore: 95,
+              deadline: item.deadline,
+              closingDateFormatted: `Closes ${new Date(item.deadline).toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}`,
+              amount: Number(item.amount_monthly || item.amount) || 10000,
+              amountFormatted: `₹${Number(item.amount_monthly || item.amount || 10000).toLocaleString("en-IN")} / month`,
+              amountPeriod: "month",
+              description: item.description || "Government scholarship scheme.",
+              eligibilityCriteria: eligibleArray.map((c) => `${c} candidates eligible`),
+              requiredDocuments: [
+                "Aadhaar Card",
+                "Caste Certificate",
+                "Income Certificate",
+                "Marksheet",
+              ],
+              benefits: ["Monthly DBT Fellowship", "Contingency Research Grant"],
+              selectionProcess: "Direct Verification by State Nodal Officer",
+              sponsoringBody: "Central Ministry",
+              tags: eligibleArray,
+              genderEligibility: "All",
+              status: item.status || "active",
+            };
+          });
+          setFeaturedScholarships(fullList);
         }
       } catch (err) {
-        // Graceful fallback
-        setHeroScholarships([
-          {
-            id: "hero-1",
-            title: "National Fellowship for ST Students",
-            amount_monthly: 37000,
-            deadline: "2026-09-28",
-            category_eligible: ["ST"],
-          },
-          {
-            id: "hero-2",
-            title: "Post-Matric Scholarship for ST/SC",
-            amount_monthly: 12000,
-            deadline: "2026-10-15",
-            category_eligible: ["ST", "SC"],
-          },
-          {
-            id: "hero-3",
-            title: "National Overseas Scholarship",
-            amount_monthly: 45000,
-            deadline: "2026-10-30",
-            category_eligible: ["ST", "OBC"],
-          },
-        ]);
+        console.error("Error fetching hero scholarships:", err);
       } finally {
         setLoadingHero(false);
       }
@@ -419,7 +410,7 @@ export default function LandingPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {SCHOLARSHIPS.slice(0, 3).map((scholarship) => (
+            {featuredScholarships.slice(0, 3).map((scholarship) => (
               <ScholarshipCard
                 key={scholarship.id}
                 scholarship={scholarship}

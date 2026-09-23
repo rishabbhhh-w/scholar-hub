@@ -49,7 +49,7 @@ function ScholarshipsContent() {
   const searchParams = useSearchParams();
   const initialQuery = searchParams ? searchParams.get("q") || searchParams.get("query") || "" : "";
 
-  const [scholarshipList, setScholarshipList] = useState<Scholarship[]>(SCHOLARSHIPS);
+  const [scholarshipList, setScholarshipList] = useState<Scholarship[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(initialQuery);
@@ -106,19 +106,22 @@ function ScholarshipsContent() {
       }
 
       // Fetch scholarships from Supabase
-      // Officers fetch ALL schemes (active & inactive), students fetch active only
-      const query = supabase
+      let { data, error } = await supabase
         .from("scholarships")
         .select("*")
-        .order("deadline", { ascending: true });
-
-      const { data, error } = await query;
-
-      let mapped: Scholarship[] = [];
+        .order("created_at", { ascending: false });
 
       if (error) {
-        console.warn("Supabase query error (using seed fallback):", error.message);
+        // Fallback ordering if created_at column is missing
+        const fallback = await supabase
+          .from("scholarships")
+          .select("*")
+          .order("deadline", { ascending: true });
+        data = fallback.data;
+        error = fallback.error;
       }
+
+      let mapped: Scholarship[] = [];
 
       if (data && data.length > 0) {
         mapped = data.map((item: any) => {
@@ -166,22 +169,11 @@ function ScholarshipsContent() {
         });
       }
 
-      // Combine DB schemes with default seed SCHOLARSHIPS
-      if (mapped.length === 0) {
-        setScholarshipList(SCHOLARSHIPS.map((s) => ({ ...s, status: s.status || "active" })));
-      } else {
-        const existingIds = new Set(mapped.map((s) => s.id));
-        const combined = [...mapped];
-        SCHOLARSHIPS.forEach((s) => {
-          if (!existingIds.has(s.id)) {
-            combined.push({ ...s, status: s.status || "active" });
-          }
-        });
-        setScholarshipList(combined);
-      }
+      setScholarshipList(mapped);
     } catch (err: any) {
       console.error("Error fetching scholarships:", err);
-      setScholarshipList(SCHOLARSHIPS.map((s) => ({ ...s, status: s.status || "active" })));
+      setFetchError("Failed to load scholarships.");
+      setScholarshipList([]);
     } finally {
       setLoading(false);
     }
@@ -357,6 +349,7 @@ function ScholarshipsContent() {
         toast.success("New scholarship scheme created successfully!");
       }
 
+      await fetchScholarshipsAndApplications();
       setIsSchemeModalOpen(false);
     } catch (err: any) {
       toast.error(err?.message || "Failed to save scholarship scheme.");
