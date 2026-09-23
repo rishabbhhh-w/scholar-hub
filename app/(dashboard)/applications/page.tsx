@@ -6,21 +6,12 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  Building2,
-  Calendar,
-  FileText,
-  Search,
   Plus,
-  RefreshCw,
-  LayoutGrid,
-  List,
   Download,
-  AlertTriangle,
   ArrowRight,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/shared/Toast";
@@ -87,7 +78,6 @@ export default function ApplicationsTrackingPage() {
   const [selectedApp, setSelectedApp] = useState<DBApplication | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState<"kanban" | "list">("list");
   const [newAppModalOpen, setNewAppModalOpen] = useState(false);
   const [availableScholarships, setAvailableScholarships] = useState<any[]>([]);
   const [selectedScholarshipId, setSelectedScholarshipId] = useState("");
@@ -107,23 +97,52 @@ export default function ApplicationsTrackingPage() {
       if (user) {
         setCurrentUserId(user.id);
 
-        // Fetch applications joined with scholarships
-        const { data: apps, error } = await supabase
+        // Fetch applications joined with scholarships using user session
+        let { data: apps, error } = await supabase
           .from("applications")
-          .select(
-            "id, tracking_number, status, submitted_at, updated_at, notes, scholarship_id, scholarships(title, amount_monthly, deadline)"
-          )
+          .select(`
+            id,
+            status,
+            submitted_at,
+            tracking_number,
+            scholarship_id,
+            scholarships (
+              title,
+              amount,
+              deadline,
+              eligibility_criteria
+            )
+          `)
           .eq("user_id", user.id)
           .order("submitted_at", { ascending: false });
 
         if (error) {
-          throw error;
+          // Fallback if DB table uses amount_monthly column name
+          const fallbackRes = await supabase
+            .from("applications")
+            .select(`
+              id,
+              status,
+              submitted_at,
+              tracking_number,
+              scholarship_id,
+              scholarships (
+                *
+              )
+            `)
+            .eq("user_id", user.id)
+            .order("submitted_at", { ascending: false });
+
+          if (!fallbackRes.error && fallbackRes.data) {
+            apps = fallbackRes.data;
+            error = null;
+          }
         }
 
         if (apps) {
           const mapped: DBApplication[] = apps.map((item: any) => {
             const sch = item.scholarships;
-            const monthly = sch?.amount_monthly ? Number(sch.amount_monthly) : 10000;
+            const rawAmt = sch?.amount || sch?.amount_monthly || 10000;
             const deadlineDate = sch?.deadline;
 
             return {
@@ -131,7 +150,7 @@ export default function ApplicationsTrackingPage() {
               trackingNumber: formatTrackingNumber(item.tracking_number),
               scholarshipTitle: sch?.title || "National Scholarship Scheme",
               scholarshipId: item.scholarship_id,
-              amount: `₹${monthly.toLocaleString("en-IN")} / month`,
+              amount: typeof rawAmt === "number" ? `₹${rawAmt.toLocaleString("en-IN")} / month` : String(rawAmt),
               deadline: deadlineDate || "",
               deadlineFormatted: deadlineDate
                 ? new Date(deadlineDate).toLocaleDateString("en-IN", {
@@ -268,29 +287,6 @@ export default function ApplicationsTrackingPage() {
             <Plus className="h-4 w-4" />
             <span>Apply for Scheme</span>
           </Button>
-
-          <div className="flex rounded-xl bg-stone-100 p-1 dark:bg-[#132820]">
-            <button
-              onClick={() => setViewMode("list")}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                viewMode === "list"
-                  ? "bg-white text-[#064e3b] shadow-sm dark:bg-[#0f231c] dark:text-emerald-400"
-                  : "text-stone-500 hover:text-stone-800 dark:text-stone-400"
-              }`}
-            >
-              List View
-            </button>
-            <button
-              onClick={() => setViewMode("kanban")}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                viewMode === "kanban"
-                  ? "bg-white text-[#064e3b] shadow-sm dark:bg-[#0f231c] dark:text-emerald-400"
-                  : "text-stone-500 hover:text-stone-800 dark:text-stone-400"
-              }`}
-            >
-              Kanban View
-            </button>
-          </div>
         </div>
       </div>
 
@@ -325,10 +321,10 @@ export default function ApplicationsTrackingPage() {
             </Button>
           </Link>
         </div>
-      ) : viewMode === "list" ? (
-        /* List View */
+      ) : (
+        /* Clean List View Default */
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Left 7 Columns: Application List */}
+          {/* Left 7 Columns: Application Cards List */}
           <div className="lg:col-span-7 space-y-4">
             {filteredApps.map((app) => {
               const isSelected = selectedApp?.id === app.id;
@@ -363,7 +359,7 @@ export default function ApplicationsTrackingPage() {
                     <span className="font-bold text-[#064e3b] dark:text-emerald-400">
                       Amount: {app.amount}
                     </span>
-                    <span className="text-stone-400">
+                    <span className="text-stone-400 font-medium">
                       {app.submittedAt.startsWith("Recently")
                         ? app.submittedAt
                         : `Submitted: ${app.submittedAt}`}
@@ -374,7 +370,7 @@ export default function ApplicationsTrackingPage() {
             })}
           </div>
 
-          {/* Right 5 Columns: Detailed Audit Timeline */}
+          {/* Right 5 Columns: Detailed Application Dossier */}
           <div className="lg:col-span-5">
             {selectedApp && (
               <div className="sticky top-28 rounded-3xl border border-stone-200/90 bg-white p-6 shadow-soft dark:border-[#193c30] dark:bg-[#0f231c] space-y-6">
@@ -441,82 +437,6 @@ export default function ApplicationsTrackingPage() {
               </div>
             )}
           </div>
-        </div>
-      ) : (
-        /* Kanban View: 4 Columns (Submitted | Under Review | Approved | Rejected) */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pb-4">
-          {[
-            {
-              title: "Submitted",
-              filterFn: (a: DBApplication) => a.status === "pending",
-              badgeColor: "bg-stone-200 text-stone-800",
-            },
-            {
-              title: "Under Review",
-              filterFn: (a: DBApplication) => a.status === "under_review",
-              badgeColor: "bg-amber-100 text-amber-800",
-            },
-            {
-              title: "Approved",
-              filterFn: (a: DBApplication) => a.status === "approved" || a.status === "disbursed",
-              badgeColor: "bg-emerald-100 text-emerald-800",
-            },
-            {
-              title: "Rejected",
-              filterFn: (a: DBApplication) => a.status === "rejected",
-              badgeColor: "bg-rose-100 text-rose-800",
-            },
-          ].map((col) => {
-            const colApps = applications.filter(col.filterFn);
-
-            return (
-              <div
-                key={col.title}
-                className="rounded-3xl border border-stone-200/80 bg-stone-50/70 p-4 dark:border-[#193c30] dark:bg-[#0c1c16]"
-              >
-                <div className="flex items-center justify-between mb-3 px-1">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-stone-700 dark:text-stone-300">
-                    {col.title}
-                  </h4>
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${col.badgeColor}`}>
-                    {colApps.length}
-                  </span>
-                </div>
-
-                <div className="space-y-3">
-                  {colApps.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-stone-200 p-4 text-center text-xs text-stone-400">
-                      No applications
-                    </div>
-                  ) : (
-                    colApps.map((app) => (
-                      <div
-                        key={app.id}
-                        className="rounded-2xl border border-stone-200/90 bg-white p-4 shadow-soft dark:border-[#193c30] dark:bg-[#0f231c] space-y-2"
-                      >
-                        <span className="font-mono text-[10px] text-stone-400 block">
-                          {app.trackingNumber}
-                        </span>
-                        <h5 className="text-xs font-bold text-stone-900 dark:text-white line-clamp-2">
-                          {app.scholarshipTitle}
-                        </h5>
-                        <div className="flex items-center justify-between text-[11px] pt-1">
-                          <span className="text-[#064e3b] dark:text-emerald-400 font-bold">
-                            {app.amount}
-                          </span>
-                          <span className="text-stone-400">
-                            {app.submittedAt.startsWith("Recently")
-                              ? app.submittedAt
-                              : `Submitted: ${app.submittedAt}`}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            );
-          })}
         </div>
       )}
 

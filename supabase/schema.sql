@@ -170,6 +170,10 @@ CREATE POLICY "Admins can insert/update/delete scholarships" ON public.scholarsh
     FOR ALL USING (public.is_officer_or_admin());
 
 -- 3. APPLICATIONS POLICIES
+DROP POLICY IF EXISTS "Users can view their own applications" ON public.applications;
+CREATE POLICY "Users can view their own applications" ON public.applications
+    FOR SELECT USING (auth.uid() = user_id);
+
 DROP POLICY IF EXISTS "Students view own applications or officers view all" ON public.applications;
 CREATE POLICY "Students view own applications or officers view all" ON public.applications
     FOR SELECT USING (auth.uid() = user_id OR public.is_officer_or_admin());
