@@ -2,22 +2,17 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Menu,
   Search,
   Bell,
   Sun,
   Moon,
-  ShieldCheck,
   CheckCircle2,
-  X,
-  ArrowRight,
-  ExternalLink,
 } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 import { NOTIFICATIONS } from "@/lib/data/notifications";
-import { Badge } from "@/components/ui/badge";
-
 import { useUserProfile } from "@/lib/hooks/useUserProfile";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -32,11 +27,21 @@ export function Header({
   title = "Dashboard",
   subtitle,
 }: HeaderProps) {
+  const router = useRouter();
   const { setTheme, resolvedTheme } = useTheme();
   const [notifOpen, setNotifOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const profile = useUserProfile();
   const unreadCount = NOTIFICATIONS.filter((n) => !n.isRead).length;
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      router.push(`/scholarships?q=${encodeURIComponent(searchQuery.trim())}`);
+    } else {
+      router.push("/scholarships");
+    }
+  };
 
   return (
     <header className="sticky top-0 z-30 flex h-20 w-full items-center justify-between border-b border-stone-200/80 bg-[#fcfbf9]/95 px-4 backdrop-blur-sm sm:px-8 dark:border-[#193c30] dark:bg-[#07130e]/95">
@@ -62,7 +67,10 @@ export function Header({
       </div>
 
       {/* Center Search bar */}
-      <div className="hidden md:flex max-w-md flex-1 items-center px-6">
+      <form
+        onSubmit={handleSearchSubmit}
+        className="hidden md:flex max-w-md flex-1 items-center px-6"
+      >
         <div className="relative w-full">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
           <input
@@ -70,10 +78,16 @@ export function Header({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search 140+ national and state scholarships..."
-            className="h-10 w-full rounded-xl border border-stone-200 bg-white pl-10 pr-4 text-xs text-stone-900 placeholder:text-stone-400 focus:border-[#064e3b] focus:outline-none focus:ring-1 focus:ring-[#064e3b] dark:border-[#193c30] dark:bg-[#0f231c] dark:text-stone-100 dark:placeholder:text-stone-500"
+            className="h-10 w-full rounded-xl border border-stone-200 bg-white pl-10 pr-20 text-xs text-stone-900 placeholder:text-stone-400 focus:border-[#064e3b] focus:outline-none focus:ring-1 focus:ring-[#064e3b] dark:border-[#193c30] dark:bg-[#0f231c] dark:text-stone-100 dark:placeholder:text-stone-500"
           />
+          <button
+            type="submit"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg bg-[#064e3b] px-3 py-1 text-[11px] font-semibold text-white hover:bg-[#053d2e] dark:bg-emerald-600 dark:hover:bg-emerald-500 shadow-xs"
+          >
+            Search
+          </button>
         </div>
-      </div>
+      </form>
 
       {/* Right: Actions (DBT badge, Theme Toggle, Notification Bell, User Avatar) */}
       <div className="flex items-center gap-2 sm:gap-3">
