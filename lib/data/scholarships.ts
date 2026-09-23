@@ -23,6 +23,7 @@ export interface Scholarship {
   genderEligibility: "All" | "Female Only";
   maxAnnualIncome?: number;
   minPercentageRequired?: number;
+  status?: "active" | "inactive";
 }
 
 export const SCHOLARSHIPS: Scholarship[] = [

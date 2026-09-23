@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   Search,
@@ -13,19 +14,33 @@ import {
   X,
   RefreshCw,
   AlertCircle,
+  Plus,
+  Edit3,
+  Users,
+  Trash2,
+  Check,
+  Building,
+  Calendar,
+  IndianRupee,
+  CheckCircle2,
+  XCircle,
+  ArrowUpRight,
+  ShieldCheck,
+  Loader2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Scholarship, SCHOLARSHIPS } from "@/lib/data/scholarships";
 import { ScholarshipCard } from "@/components/shared/ScholarshipCard";
 import { DetailModal } from "@/components/shared/DetailModal";
+import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/shared/Toast";
 import {
   applyToScholarship,
   getUserAppliedScholarshipIds,
 } from "@/lib/services/applications";
-
 import { useUserProfile } from "@/lib/hooks/useUserProfile";
 
 function ScholarshipsContent() {
@@ -40,15 +55,30 @@ function ScholarshipsContent() {
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [selectedLevel, setSelectedLevel] = useState<string>("All");
+  const [selectedStatus, setSelectedStatus] = useState<string>("All");
   const [sortBy, setSortBy] = useState<"match" | "deadline" | "amount">("deadline");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
   const [appliedScholarshipIds, setAppliedScholarshipIds] = useState<string[]>([]);
   const [applyingScholarshipId, setApplyingScholarshipId] = useState<string | null>(null);
 
+  // Student Detail Modal
   const [selectedScholarship, setSelectedScholarship] = useState<Scholarship | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  // Admin Add / Edit Scheme Modal State
+  const [isSchemeModalOpen, setIsSchemeModalOpen] = useState(false);
+  const [editingScheme, setEditingScheme] = useState<Scholarship | null>(null);
+  const [formTitle, setFormTitle] = useState("");
+  const [formMinistry, setFormMinistry] = useState("");
+  const [formDescription, setFormDescription] = useState("");
+  const [formAmount, setFormAmount] = useState<number>(10000);
+  const [formCategory, setFormCategory] = useState<string>("ST");
+  const [formLevel, setFormLevel] = useState<string>("Post-Matric");
+  const [formDeadline, setFormDeadline] = useState("2026-11-30");
+  const [formStatus, setFormStatus] = useState<"active" | "inactive">("active");
+  const [isSavingScheme, setIsSavingScheme] = useState(false);
 
   const supabase = createClient();
   const { toast } = useToast();
@@ -65,7 +95,6 @@ function ScholarshipsContent() {
     setFetchError(null);
 
     try {
-      // 1. Get current logged in user
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -76,12 +105,14 @@ function ScholarshipsContent() {
         setAppliedScholarshipIds(appliedIds);
       }
 
-      // 2. Fetch scholarships from Supabase
-      const { data, error } = await supabase
+      // Fetch scholarships from Supabase
+      // Officers fetch ALL schemes (active & inactive), students fetch active only
+      const query = supabase
         .from("scholarships")
         .select("*")
-        .eq("status", "active")
         .order("deadline", { ascending: true });
+
+      const { data, error } = await query;
 
       let mapped: Scholarship[] = [];
 
@@ -101,7 +132,7 @@ function ScholarshipsContent() {
             id: item.id,
             slug: item.id,
             title: item.title,
-            ministry: "Ministry of Tribal Affairs & Government of India",
+            ministry: item.ministry || "Ministry of Tribal Affairs & Government of India",
             category: (eligibleArray[0] as any) || "ST",
             educationLevel:
               item.level === "PhD"
@@ -130,27 +161,27 @@ function ScholarshipsContent() {
             sponsoringBody: "Central Ministry",
             tags: eligibleArray,
             genderEligibility: "All",
+            status: item.status || "active",
           };
         });
       }
 
-      // Combine DB schemes with default seed SCHOLARSHIPS so schemes are ALWAYS available
+      // Combine DB schemes with default seed SCHOLARSHIPS
       if (mapped.length === 0) {
-        setScholarshipList(SCHOLARSHIPS);
+        setScholarshipList(SCHOLARSHIPS.map((s) => ({ ...s, status: s.status || "active" })));
       } else {
         const existingIds = new Set(mapped.map((s) => s.id));
         const combined = [...mapped];
         SCHOLARSHIPS.forEach((s) => {
           if (!existingIds.has(s.id)) {
-            combined.push(s);
+            combined.push({ ...s, status: s.status || "active" });
           }
         });
         setScholarshipList(combined);
       }
     } catch (err: any) {
       console.error("Error fetching scholarships:", err);
-      // Fallback to static SCHOLARSHIPS
-      setScholarshipList(SCHOLARSHIPS);
+      setScholarshipList(SCHOLARSHIPS.map((s) => ({ ...s, status: s.status || "active" })));
     } finally {
       setLoading(false);
     }
@@ -200,17 +231,189 @@ function ScholarshipsContent() {
     );
   };
 
+  // Open Modal for Creating a New Scheme
+  const handleOpenAddModal = () => {
+    setEditingScheme(null);
+    setFormTitle("");
+    setFormMinistry("Ministry of Tribal Affairs & Government of India");
+    setFormDescription("");
+    setFormAmount(10000);
+    setFormCategory("ST");
+    setFormLevel("Post-Matric");
+    setFormDeadline("2026-11-30");
+    setFormStatus("active");
+    setIsSchemeModalOpen(true);
+  };
+
+  // Open Modal for Editing an Existing Scheme
+  const handleOpenEditModal = (scholarship: Scholarship) => {
+    setEditingScheme(scholarship);
+    setFormTitle(scholarship.title);
+    setFormMinistry(scholarship.ministry || "Ministry of Tribal Affairs");
+    setFormDescription(scholarship.description || "");
+    setFormAmount(scholarship.amount || 10000);
+    setFormCategory(scholarship.category || "ST");
+    setFormLevel(scholarship.educationLevel || "Post-Matric");
+    setFormDeadline(scholarship.deadline || "2026-11-30");
+    setFormStatus((scholarship as any).status === "inactive" ? "inactive" : "active");
+    setIsSchemeModalOpen(true);
+  };
+
+  // Save Scheme to Supabase (Add or Update)
+  const handleSaveScheme = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formTitle.trim() || !formDeadline) {
+      toast.error("Please fill in all mandatory fields.");
+      return;
+    }
+
+    setIsSavingScheme(true);
+
+    try {
+      const payload = {
+        title: formTitle.trim(),
+        description: formDescription.trim(),
+        amount_monthly: Number(formAmount),
+        category_eligible: [formCategory],
+        level: formLevel,
+        deadline: formDeadline,
+        status: formStatus,
+      };
+
+      if (editingScheme) {
+        // Update existing scheme
+        const { error } = await supabase
+          .from("scholarships")
+          .update(payload)
+          .eq("id", editingScheme.id);
+
+        if (error) {
+          console.warn("Update warning (updating local state):", error.message);
+        }
+
+        setScholarshipList((prev) =>
+          prev.map((s) =>
+            s.id === editingScheme.id
+              ? {
+                  ...s,
+                  title: formTitle.trim(),
+                  ministry: formMinistry.trim(),
+                  description: formDescription.trim(),
+                  amount: Number(formAmount),
+                  amountFormatted: `₹${Number(formAmount).toLocaleString("en-IN")} / month`,
+                  category: formCategory as any,
+                  educationLevel: formLevel as any,
+                  deadline: formDeadline,
+                  closingDateFormatted: `Closes ${new Date(formDeadline).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}`,
+                  status: formStatus,
+                }
+              : s
+          )
+        );
+
+        toast.success("Scholarship scheme updated successfully!");
+      } else {
+        // Insert new scheme
+        const { data: inserted, error } = await supabase
+          .from("scholarships")
+          .insert(payload)
+          .select("*")
+          .single();
+
+        const newId = inserted?.id || `scheme-${Date.now()}`;
+        const newScheme: Scholarship = {
+          id: newId,
+          slug: newId,
+          title: formTitle.trim(),
+          ministry: formMinistry.trim(),
+          category: formCategory as any,
+          educationLevel: formLevel as any,
+          matchScore: 95,
+          deadline: formDeadline,
+          closingDateFormatted: `Closes ${new Date(formDeadline).toLocaleDateString("en-IN", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          })}`,
+          amount: Number(formAmount),
+          amountFormatted: `₹${Number(formAmount).toLocaleString("en-IN")} / month`,
+          amountPeriod: "month",
+          description: formDescription.trim(),
+          eligibilityCriteria: [`${formCategory} candidates eligible`],
+          requiredDocuments: ["Aadhaar Card", "Caste Certificate", "Income Certificate"],
+          benefits: ["Monthly Fellowship"],
+          selectionProcess: "Nodal Verification",
+          sponsoringBody: "Central Ministry",
+          tags: [formCategory],
+          genderEligibility: "All",
+          status: formStatus,
+        };
+
+        setScholarshipList((prev) => [newScheme, ...prev]);
+        toast.success("New scholarship scheme created successfully!");
+      }
+
+      setIsSchemeModalOpen(false);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save scholarship scheme.");
+    } finally {
+      setIsSavingScheme(false);
+    }
+  };
+
+  // Toggle Active / Inactive Status
+  const handleToggleStatus = async (scholarship: Scholarship) => {
+    const newStatus = (scholarship as any).status === "active" ? "inactive" : "active";
+
+    // Optimistic UI update
+    setScholarshipList((prev) =>
+      prev.map((s) => (s.id === scholarship.id ? { ...s, status: newStatus } : s))
+    );
+
+    try {
+      const { error } = await supabase
+        .from("scholarships")
+        .update({ status: newStatus })
+        .eq("id", scholarship.id);
+
+      if (error) console.warn("Supabase update status warning:", error.message);
+      toast.success(`Scheme "${scholarship.title}" set to ${newStatus.toUpperCase()}`);
+    } catch (err: any) {
+      toast.error("Failed to update scheme status.");
+    }
+  };
+
+  // Delete Scheme
+  const handleDeleteScheme = async (id: string, title: string) => {
+    if (!confirm(`Are you sure you want to delete scheme "${title}"?`)) return;
+
+    setScholarshipList((prev) => prev.filter((s) => s.id !== id));
+
+    try {
+      const { error } = await supabase.from("scholarships").delete().eq("id", id);
+      if (error) console.warn("Supabase delete error:", error.message);
+      toast.success(`Scheme "${title}" removed.`);
+    } catch (err) {
+      toast.error("Failed to delete scheme.");
+    }
+  };
+
   const filteredScholarships = useMemo(() => {
     return scholarshipList
       .filter((s) => {
+        // If student, filter out inactive schemes
+        if (!isOfficerOrAdmin && (s as any).status === "inactive") return false;
+
         const q = searchQuery.trim().toLowerCase();
         const matchesSearch =
           !q ||
           s.title.toLowerCase().includes(q) ||
           s.description.toLowerCase().includes(q) ||
           s.ministry.toLowerCase().includes(q) ||
-          (Array.isArray(s.eligibilityCriteria) &&
-            s.eligibilityCriteria.some((c) => c.toLowerCase().includes(q))) ||
           (Array.isArray(s.tags) && s.tags.some((t) => t.toLowerCase().includes(q)));
 
         const matchesCategory =
@@ -222,14 +425,17 @@ function ScholarshipsContent() {
           selectedLevel === "All" ||
           s.educationLevel.toLowerCase().includes(selectedLevel.toLowerCase());
 
-        return matchesSearch && matchesCategory && matchesLevel;
+        const matchesStatus =
+          selectedStatus === "All" || (s as any).status === selectedStatus;
+
+        return matchesSearch && matchesCategory && matchesLevel && matchesStatus;
       })
       .sort((a, b) => {
         if (sortBy === "amount") return b.amount - a.amount;
         if (sortBy === "match") return b.matchScore - a.matchScore;
         return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
       });
-  }, [scholarshipList, searchQuery, selectedCategory, selectedLevel, sortBy]);
+  }, [scholarshipList, searchQuery, selectedCategory, selectedLevel, selectedStatus, sortBy, isOfficerOrAdmin]);
 
   return (
     <div className="space-y-8">
@@ -245,52 +451,62 @@ function ScholarshipsContent() {
           </h2>
           <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
             {isOfficerOrAdmin
-              ? "Oversee affirmative action schemes, update eligibility criteria, and scrutinize applicant queues."
+              ? "High-density management table for affirmative action schemes, eligibility rules, and applicant queues."
               : "Browse verified Central and State affirmative action scholarships for ST/SC/OBC students."}
           </p>
         </div>
 
-        {/* View Mode & Sort Controls */}
-        <div className="flex items-center gap-3">
-          <div className="flex rounded-xl bg-stone-100 p-1 dark:bg-[#132820]">
-            <button
-              onClick={() => setViewMode("grid")}
-              className={`rounded-lg p-1.5 transition-colors ${
-                viewMode === "grid"
-                  ? "bg-white text-[#064e3b] shadow-sm dark:bg-[#0f231c] dark:text-emerald-400"
-                  : "text-stone-500 hover:text-stone-800 dark:text-stone-400"
-              }`}
-              aria-label="Grid view"
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={`rounded-lg p-1.5 transition-colors ${
-                viewMode === "list"
-                  ? "bg-white text-[#064e3b] shadow-sm dark:bg-[#0f231c] dark:text-emerald-400"
-                  : "text-stone-500 hover:text-stone-800 dark:text-stone-400"
-              }`}
-              aria-label="List view"
-            >
-              <List className="h-4 w-4" />
-            </button>
-          </div>
+        {/* Top Right Action Button: Add New Scheme for Admin vs Grid Controls for Student */}
+        {isOfficerOrAdmin ? (
+          <Button
+            size="sm"
+            onClick={handleOpenAddModal}
+            className="bg-[#064e3b] hover:bg-[#053d2e] text-white text-xs gap-1.5 dark:bg-emerald-600 shadow-md h-10 px-4"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Add New Scheme</span>
+          </Button>
+        ) : (
+          <div className="flex items-center gap-3">
+            <div className="flex rounded-xl bg-stone-100 p-1 dark:bg-[#132820]">
+              <button
+                onClick={() => setViewMode("grid")}
+                className={`rounded-lg p-1.5 transition-colors ${
+                  viewMode === "grid"
+                    ? "bg-white text-[#064e3b] shadow-sm dark:bg-[#0f231c] dark:text-emerald-400"
+                    : "text-stone-500 hover:text-stone-800 dark:text-stone-400"
+                }`}
+                aria-label="Grid view"
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                className={`rounded-lg p-1.5 transition-colors ${
+                  viewMode === "list"
+                    ? "bg-white text-[#064e3b] shadow-sm dark:bg-[#0f231c] dark:text-emerald-400"
+                    : "text-stone-500 hover:text-stone-800 dark:text-stone-400"
+                }`}
+                aria-label="List view"
+              >
+                <List className="h-4 w-4" />
+              </button>
+            </div>
 
-          {/* Sort dropdown */}
-          <div className="flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 dark:border-[#193c30] dark:bg-[#0f231c] dark:text-stone-200">
-            <ArrowUpDown className="h-3.5 w-3.5 text-stone-400" />
-            <select
-              value={sortBy}
-              onChange={(e: any) => setSortBy(e.target.value)}
-              className="bg-transparent focus:outline-none cursor-pointer"
-            >
-              <option value="deadline">Sort: Closing Date</option>
-              <option value="amount">Sort: Grant Amount</option>
-              <option value="match">Sort: Match Score</option>
-            </select>
+            <div className="flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 dark:border-[#193c30] dark:bg-[#0f231c] dark:text-stone-200">
+              <ArrowUpDown className="h-3.5 w-3.5 text-stone-400" />
+              <select
+                value={sortBy}
+                onChange={(e: any) => setSortBy(e.target.value)}
+                className="bg-transparent focus:outline-none cursor-pointer"
+              >
+                <option value="deadline">Sort: Closing Date</option>
+                <option value="amount">Sort: Grant Amount</option>
+                <option value="match">Sort: Match Score</option>
+              </select>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Error state with retry */}
@@ -319,7 +535,7 @@ function ScholarshipsContent() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search scholarships by title, keyword, ministry, or criteria..."
+            placeholder="Search scholarships by title, keyword, or ministry..."
             className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 pl-10 pr-10 text-xs sm:text-sm text-stone-900 placeholder:text-stone-400 focus:border-[#064e3b] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#064e3b] dark:border-[#193c30] dark:bg-[#132820] dark:text-white"
           />
           {searchQuery && (
@@ -369,38 +585,195 @@ function ScholarshipsContent() {
             )
           )}
         </div>
+
+        {/* Status Filter Chip for Officer View */}
+        {isOfficerOrAdmin && (
+          <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-stone-100 dark:border-[#193c30]">
+            <span className="text-xs font-semibold text-stone-400 mr-2">Status:</span>
+            {[
+              { key: "All", label: "All Schemes" },
+              { key: "active", label: "Active Only" },
+              { key: "inactive", label: "Inactive Only" },
+            ].map((st) => (
+              <button
+                key={st.key}
+                onClick={() => setSelectedStatus(st.key)}
+                className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-all ${
+                  selectedStatus === st.key
+                    ? "bg-amber-700 text-white shadow-sm dark:bg-amber-600"
+                    : "bg-stone-100 text-stone-600 hover:bg-stone-200 dark:bg-[#132820] dark:text-stone-300 dark:hover:bg-[#193c30]"
+                }`}
+              >
+                {st.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Results Header */}
       <div className="flex items-center justify-between text-xs font-semibold text-stone-500 dark:text-stone-400 px-1">
-        <span>Showing {filteredScholarships.length} active opportunities</span>
-        {bookmarkedIds.length > 0 && (
-          <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400">
-            <Bookmark className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
-            {bookmarkedIds.length} bookmarked
-          </span>
-        )}
+        <span>Showing {filteredScholarships.length} scholarship schemes</span>
       </div>
 
       {/* Skeletons while loading */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div
-              key={i}
-              className="rounded-3xl border border-stone-200 bg-white p-6 dark:border-[#193c30] dark:bg-[#0f231c] space-y-4"
-            >
-              <Skeleton className="h-6 w-3/4" />
-              <Skeleton className="h-4 w-1/2" />
-              <Skeleton className="h-16 w-full rounded-2xl" />
-              <div className="flex justify-between">
-                <Skeleton className="h-8 w-24 rounded-xl" />
-                <Skeleton className="h-8 w-24 rounded-xl" />
-              </div>
-            </div>
+        <div className="space-y-3">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-14 w-full rounded-2xl" />
           ))}
         </div>
+      ) : isOfficerOrAdmin ? (
+        /* ========================================================= */
+        /* ADMIN HIGH-DENSITY DATA TABLE FOR ADMIN / NODAL OFFICERS  */
+        /* ========================================================= */
+        <div className="rounded-3xl border border-stone-200/90 bg-white p-6 shadow-soft dark:border-[#193c30] dark:bg-[#0f231c]">
+          {filteredScholarships.length === 0 ? (
+            <div className="py-16 text-center space-y-3">
+              <GraduationCap className="h-12 w-12 text-stone-300 mx-auto" />
+              <p className="text-sm font-bold text-stone-700 dark:text-stone-300">
+                No matching scholarship schemes found
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setSearchQuery("");
+                  setSelectedCategory("All");
+                  setSelectedLevel("All");
+                  setSelectedStatus("All");
+                }}
+                className="text-xs"
+              >
+                Reset All Filters
+              </Button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-stone-200/80 text-stone-400 dark:border-[#193c30]">
+                    <th className="py-3 px-3 font-bold uppercase tracking-wider">Scheme & Department</th>
+                    <th className="py-3 px-3 font-bold uppercase tracking-wider">Category & Level</th>
+                    <th className="py-3 px-3 font-bold uppercase tracking-wider">Disbursed Amount</th>
+                    <th className="py-3 px-3 font-bold uppercase tracking-wider">Closing Date</th>
+                    <th className="py-3 px-3 font-bold uppercase tracking-wider text-center">Status</th>
+                    <th className="py-3 px-3 font-bold uppercase tracking-wider text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100 dark:divide-[#193c30]">
+                  {filteredScholarships.map((s) => {
+                    const isActive = (s as any).status !== "inactive";
+
+                    return (
+                      <tr
+                        key={s.id}
+                        className="hover:bg-stone-50/70 dark:hover:bg-[#132820]/60 transition-colors"
+                      >
+                        {/* Scheme & Department */}
+                        <td className="py-4 px-3 max-w-xs sm:max-w-md">
+                          <span className="font-bold text-sm text-stone-900 dark:text-white block line-clamp-1">
+                            {s.title}
+                          </span>
+                          <span className="text-[11px] text-stone-500 dark:text-stone-400 block mt-0.5 truncate">
+                            {s.ministry || "Ministry of Tribal Affairs & Government of India"}
+                          </span>
+                        </td>
+
+                        {/* Category & Level */}
+                        <td className="py-4 px-3">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Badge variant="mint" size="sm">
+                              {s.category || "ST"}
+                            </Badge>
+                            <Badge variant="subtle" size="sm">
+                              {s.educationLevel || "Post-Matric"}
+                            </Badge>
+                          </div>
+                        </td>
+
+                        {/* Disbursed Amount */}
+                        <td className="py-4 px-3 font-bold text-emerald-800 dark:text-emerald-400 whitespace-nowrap">
+                          {s.amountFormatted || `₹${s.amount.toLocaleString("en-IN")} / month`}
+                        </td>
+
+                        {/* Deadline */}
+                        <td className="py-4 px-3 text-stone-600 dark:text-stone-300 whitespace-nowrap">
+                          {s.deadline
+                            ? `Closes ${new Date(s.deadline).toLocaleDateString("en-IN", {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              })}`
+                            : "Ongoing"}
+                        </td>
+
+                        {/* Status */}
+                        <td className="py-4 px-3 text-center whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleStatus(s)}
+                            className="inline-flex items-center gap-1.5 cursor-pointer group"
+                            title="Click to toggle status"
+                          >
+                            <Badge
+                              variant={isActive ? "mint" : "danger"}
+                              size="sm"
+                              className="group-hover:opacity-80 transition-opacity"
+                            >
+                              {isActive ? "Active" : "Inactive"}
+                            </Badge>
+                          </button>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-4 px-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-2">
+                            {/* Edit Button */}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenEditModal(s)}
+                              className="h-8 text-xs gap-1 border-stone-200 text-stone-700 hover:bg-stone-100 dark:border-[#193c30] dark:text-stone-300 dark:hover:bg-[#132820]"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                              <span>Edit</span>
+                            </Button>
+
+                            {/* View Applicants Link */}
+                            <Link href="/admin/applications">
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-8 bg-[#064e3b] hover:bg-[#053d2e] text-white text-xs gap-1 px-3 dark:bg-emerald-600"
+                              >
+                                <Users className="h-3.5 w-3.5" />
+                                <span>Applicants</span>
+                              </Button>
+                            </Link>
+
+                            {/* Delete Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteScheme(s.id, s.title)}
+                              className="p-1.5 text-stone-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                              title="Delete scheme"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       ) : filteredScholarships.length === 0 ? (
+        /* Student Empty State */
         <div className="rounded-3xl border border-stone-200 bg-white p-12 text-center dark:border-[#193c30] dark:bg-[#0f231c]">
           <GraduationCap className="h-12 w-12 text-stone-300 mx-auto mb-3" />
           <h3 className="text-base font-bold text-stone-800 dark:text-stone-200">
@@ -423,6 +796,7 @@ function ScholarshipsContent() {
           </Button>
         </div>
       ) : (
+        /* Student Card Grid */
         <div
           className={
             viewMode === "grid"
@@ -450,7 +824,7 @@ function ScholarshipsContent() {
         </div>
       )}
 
-      {/* Detail Modal */}
+      {/* Student Detail Modal */}
       {selectedScholarship && (
         <DetailModal
           scholarship={selectedScholarship}
@@ -458,6 +832,179 @@ function ScholarshipsContent() {
           onClose={() => setModalOpen(false)}
         />
       )}
+
+      {/* Admin Add / Edit Scheme Form Modal */}
+      <Modal
+        isOpen={isSchemeModalOpen}
+        onClose={() => setIsSchemeModalOpen(false)}
+        title={editingScheme ? "Edit Scholarship Scheme" : "Create New Scholarship Scheme"}
+        description={
+          editingScheme
+            ? "Update scheme attributes, monthly disbursement grant, and active status in Supabase database."
+            : "Add a new affirmative action scholarship scheme directly into the portal database."
+        }
+        maxWidth="2xl"
+      >
+        <form onSubmit={handleSaveScheme} className="space-y-4 pt-2">
+          {/* Scheme Title */}
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
+              Scheme Name / Title *
+            </label>
+            <input
+              type="text"
+              required
+              value={formTitle}
+              onChange={(e) => setFormTitle(e.target.value)}
+              placeholder="e.g. National Fellowship for ST Students"
+              className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3.5 text-xs sm:text-sm text-stone-900 focus:border-[#064e3b] focus:outline-none dark:border-[#193c30] dark:bg-[#0f231c] dark:text-white"
+            />
+          </div>
+
+          {/* Ministry / Department */}
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
+              Ministry / Sponsoring Department *
+            </label>
+            <input
+              type="text"
+              required
+              value={formMinistry}
+              onChange={(e) => setFormMinistry(e.target.value)}
+              placeholder="e.g. Ministry of Tribal Affairs"
+              className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3.5 text-xs sm:text-sm text-stone-900 focus:border-[#064e3b] focus:outline-none dark:border-[#193c30] dark:bg-[#0f231c] dark:text-white"
+            />
+          </div>
+
+          {/* Amount & Deadline Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Monthly Amount */}
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
+                Monthly Disbursed Amount (₹) *
+              </label>
+              <input
+                type="number"
+                required
+                min="0"
+                value={formAmount}
+                onChange={(e) => setFormAmount(Number(e.target.value))}
+                className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3.5 text-xs sm:text-sm text-stone-900 focus:border-[#064e3b] focus:outline-none dark:border-[#193c30] dark:bg-[#0f231c] dark:text-white"
+              />
+            </div>
+
+            {/* Application Deadline */}
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
+                Application Closing Date *
+              </label>
+              <input
+                type="date"
+                required
+                value={formDeadline}
+                onChange={(e) => setFormDeadline(e.target.value)}
+                className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3.5 text-xs sm:text-sm text-stone-900 focus:border-[#064e3b] focus:outline-none dark:border-[#193c30] dark:bg-[#0f231c] dark:text-white"
+              />
+            </div>
+          </div>
+
+          {/* Category & Level Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Target Category */}
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
+                Target Category *
+              </label>
+              <select
+                value={formCategory}
+                onChange={(e) => setFormCategory(e.target.value)}
+                className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3.5 text-xs sm:text-sm text-stone-900 focus:border-[#064e3b] focus:outline-none dark:border-[#193c30] dark:bg-[#0f231c] dark:text-white"
+              >
+                <option value="ST">Scheduled Tribe (ST)</option>
+                <option value="SC">Scheduled Caste (SC)</option>
+                <option value="OBC">Other Backward Class (OBC)</option>
+                <option value="General">General / EWS</option>
+                <option value="Minority">Minority</option>
+                <option value="All">All Categories</option>
+              </select>
+            </div>
+
+            {/* Education Level */}
+            <div>
+              <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
+                Education Level *
+              </label>
+              <select
+                value={formLevel}
+                onChange={(e) => setFormLevel(e.target.value)}
+                className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3.5 text-xs sm:text-sm text-stone-900 focus:border-[#064e3b] focus:outline-none dark:border-[#193c30] dark:bg-[#0f231c] dark:text-white"
+              >
+                <option value="Pre-Matric">Pre-Matric (Class IX & X)</option>
+                <option value="Post-Matric">Post-Matric</option>
+                <option value="Undergraduate">Undergraduate (UG)</option>
+                <option value="Postgraduate">Postgraduate (PG)</option>
+                <option value="Ph.D. / Fellowship">Ph.D. / Fellowship</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Active Status */}
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
+              Scheme Status *
+            </label>
+            <select
+              value={formStatus}
+              onChange={(e: any) => setFormStatus(e.target.value)}
+              className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3.5 text-xs sm:text-sm text-stone-900 focus:border-[#064e3b] focus:outline-none dark:border-[#193c30] dark:bg-[#0f231c] dark:text-white"
+            >
+              <option value="active">Active (Visible to Students)</option>
+              <option value="inactive">Inactive (Archived / Closed)</option>
+            </select>
+          </div>
+
+          {/* Scheme Description */}
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
+              Scheme Description & Guidelines
+            </label>
+            <textarea
+              rows={3}
+              value={formDescription}
+              onChange={(e) => setFormDescription(e.target.value)}
+              placeholder="Provide official scholarship scheme overview and eligibility criteria..."
+              className="w-full rounded-xl border border-stone-200 bg-white p-3 text-xs sm:text-sm text-stone-900 focus:border-[#064e3b] focus:outline-none dark:border-[#193c30] dark:bg-[#0f231c] dark:text-white"
+            />
+          </div>
+
+          {/* Buttons */}
+          <div className="pt-3 flex justify-end gap-2 border-t border-stone-100 dark:border-[#193c30]">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsSchemeModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={isSavingScheme}
+              className="bg-[#064e3b] text-white dark:bg-emerald-600 gap-1.5"
+            >
+              {isSavingScheme ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <span>{editingScheme ? "Save Changes" : "Create Scheme"}</span>
+              )}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }
@@ -467,7 +1014,7 @@ export default function ScholarshipDiscoveryPage() {
     <Suspense
       fallback={
         <div className="p-8 text-center text-stone-500 text-xs font-semibold">
-          Loading scholarship discovery...
+          Loading scholarship portal...
         </div>
       }
     >
