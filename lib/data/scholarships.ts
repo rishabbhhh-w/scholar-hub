@@ -27,7 +27,7 @@ export interface Scholarship {
 
 export const SCHOLARSHIPS: Scholarship[] = [
   {
-    id: "nfst-2026",
+    id: "a1b2c3d4-0001-4000-8000-000000000001",
     slug: "national-fellowship-for-st-students",
     title: "National Fellowship for ST Students",
     ministry: "Ministry of Tribal Affairs",
@@ -71,7 +71,7 @@ export const SCHOLARSHIPS: Scholarship[] = [
     minPercentageRequired: 55,
   },
   {
-    id: "post-matric-st-2026",
+    id: "a1b2c3d4-0002-4000-8000-000000000002",
     slug: "post-matric-scholarship-for-st-students",
     title: "Post-Matric Scholarship for ST Students",
     ministry: "Ministry of Tribal Affairs & State Govts",
@@ -114,7 +114,7 @@ export const SCHOLARSHIPS: Scholarship[] = [
     minPercentageRequired: 50,
   },
   {
-    id: "nos-st-2026",
+    id: "a1b2c3d4-0004-4000-8000-000000000004",
     slug: "national-overseas-scholarship-for-st-candidates",
     title: "National Overseas Scholarship for ST",
     ministry: "Ministry of Tribal Affairs",
@@ -157,7 +157,7 @@ export const SCHOLARSHIPS: Scholarship[] = [
     minPercentageRequired: 55,
   },
   {
-    id: "top-class-st-2026",
+    id: "a1b2c3d4-0010-4000-8000-000000000010",
     slug: "top-class-education-scheme-for-st-students",
     title: "Top Class Education Scheme for ST Students",
     ministry: "Ministry of Tribal Affairs",
@@ -197,7 +197,7 @@ export const SCHOLARSHIPS: Scholarship[] = [
     minPercentageRequired: 60,
   },
   {
-    id: "pragati-girls-2026",
+    id: "a1b2c3d4-0008-4000-8000-000000000008",
     slug: "aicte-pragati-scholarship-for-girl-students",
     title: "AICTE Pragati Scholarship for Girls",
     ministry: "All India Council for Technical Education",
@@ -235,7 +235,7 @@ export const SCHOLARSHIPS: Scholarship[] = [
     minPercentageRequired: 60,
   },
   {
-    id: "begum-hazrat-2026",
+    id: "a1b2c3d4-0009-4000-8000-000000000009",
     slug: "begum-hazrat-mahal-national-scholarship",
     title: "Begum Hazrat Mahal National Scholarship",
     ministry: "Ministry of Minority Affairs",
@@ -272,7 +272,7 @@ export const SCHOLARSHIPS: Scholarship[] = [
     minPercentageRequired: 50,
   },
   {
-    id: "pre-matric-tribal-2026",
+    id: "a1b2c3d4-0003-4000-8000-000000000003",
     slug: "pre-matric-scholarship-for-st-students",
     title: "Pre-Matric Scholarship for ST Students (Classes IX & X)",
     ministry: "Ministry of Tribal Affairs",
@@ -309,7 +309,7 @@ export const SCHOLARSHIPS: Scholarship[] = [
     minPercentageRequired: 40,
   },
   {
-    id: "inspire-dst-2026",
+    id: "a1b2c3d4-0005-4000-8000-000000000005",
     slug: "dst-inspire-fellowship-scheme",
     title: "INSPIRE Fellowship Scheme",
     ministry: "Department of Science and Technology",

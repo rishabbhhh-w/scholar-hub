@@ -41,7 +41,7 @@ export const APPLICATIONS: ApplicationRecord[] = [
   {
     id: "app-001",
     trackingNumber: "NFST-2026-JH-90412",
-    scholarshipId: "nfst-2026",
+    scholarshipId: "a1b2c3d4-0001-4000-8000-000000000001",
     scholarshipTitle: "National Fellowship for ST Students",
     ministry: "Ministry of Tribal Affairs",
     amount: "₹37,000 / month",
@@ -91,7 +91,7 @@ export const APPLICATIONS: ApplicationRecord[] = [
   {
     id: "app-002",
     trackingNumber: "POST-2026-JH-44810",
-    scholarshipId: "post-matric-st-2026",
+    scholarshipId: "a1b2c3d4-0002-4000-8000-000000000002",
     scholarshipTitle: "Post-Matric Scholarship for ST Students",
     ministry: "Ministry of Tribal Affairs & State Govt",
     amount: "₹1,20,000 / year",
@@ -141,7 +141,7 @@ export const APPLICATIONS: ApplicationRecord[] = [
   {
     id: "app-003",
     trackingNumber: "TOP-2025-JH-11902",
-    scholarshipId: "top-class-st-2026",
+    scholarshipId: "a1b2c3d4-0010-4000-8000-000000000010",
     scholarshipTitle: "Top Class Education Scheme for ST Students",
     ministry: "Ministry of Tribal Affairs",
     amount: "₹2,50,000",
@@ -185,7 +185,7 @@ export const APPLICATIONS: ApplicationRecord[] = [
   {
     id: "app-004",
     trackingNumber: "NOS-2026-DRAFT-09",
-    scholarshipId: "nos-st-2026",
+    scholarshipId: "a1b2c3d4-0004-4000-8000-000000000004",
     scholarshipTitle: "National Overseas Scholarship for ST",
     ministry: "Ministry of Tribal Affairs",
     amount: "₹45,00,000",
