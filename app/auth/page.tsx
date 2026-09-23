@@ -214,9 +214,7 @@ function AuthContent() {
       if (error) {
         setErrorMessage(error.message);
       } else {
-        setResetSuccessMessage(
-          `A password reset link has been sent to ${email.trim()}. Please check your email inbox.`
-        );
+        setResetSuccessMessage("Password reset link sent to your email!");
       }
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to send reset link.");
