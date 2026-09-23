@@ -42,6 +42,7 @@ export async function applyToScholarship(
       user_id: userId,
       scholarship_id: scholarshipId,
       status: "pending",
+      submitted_at: new Date().toISOString(),
     });
 
     if (insertError) {

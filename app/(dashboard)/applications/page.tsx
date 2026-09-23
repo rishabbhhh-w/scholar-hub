@@ -26,6 +26,48 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/shared/Toast";
 import { applyToScholarship } from "@/lib/services/applications";
 
+function formatSubmittedDate(dateStr: string | null | undefined): string {
+  if (!dateStr || !dateStr.trim()) return "Recently submitted";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "Recently submitted";
+
+  const day = d.getDate().toString().padStart(2, "0");
+  const monthNames = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  const month = monthNames[d.getMonth()];
+  const year = d.getFullYear();
+  return `${day} ${month} ${year}`;
+}
+
+function formatTrackingNumber(tn: string | null | undefined): string {
+  if (!tn || !tn.trim()) return "Processing...";
+  let clean = tn.trim();
+  if (clean.startsWith("#")) {
+    clean = clean.slice(1).trim();
+  }
+  if (!clean) return "Processing...";
+
+  if (clean.startsWith("NSH-2026-")) {
+    return `#${clean}`;
+  }
+  if (clean.startsWith("NSH-")) {
+    return `#NSH-2026-${clean.slice(4)}`;
+  }
+  return `#NSH-2026-${clean}`;
+}
+
 export interface DBApplication {
   id: string;
   trackingNumber: string;
@@ -86,10 +128,7 @@ export default function ApplicationsTrackingPage() {
 
             return {
               id: item.id,
-              trackingNumber:
-                item.tracking_number?.startsWith("#")
-                  ? item.tracking_number
-                  : `#${item.tracking_number || "NSH-2026-" + item.id.slice(0, 6).toUpperCase()}`,
+              trackingNumber: formatTrackingNumber(item.tracking_number),
               scholarshipTitle: sch?.title || "National Scholarship Scheme",
               scholarshipId: item.scholarship_id,
               amount: `₹${monthly.toLocaleString("en-IN")} / month`,
@@ -102,16 +141,8 @@ export default function ApplicationsTrackingPage() {
                   })
                 : "Ongoing",
               status: (item.status as any) || "pending",
-              submittedAt: new Date(item.submitted_at || Date.now()).toLocaleDateString("en-IN", {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-              }),
-              updatedAt: new Date(item.updated_at || Date.now()).toLocaleDateString("en-IN", {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-              }),
+              submittedAt: formatSubmittedDate(item.submitted_at),
+              updatedAt: formatSubmittedDate(item.updated_at),
               notes: item.notes,
             };
           });
@@ -333,7 +364,9 @@ export default function ApplicationsTrackingPage() {
                       Amount: {app.amount}
                     </span>
                     <span className="text-stone-400">
-                      Applied: {app.submittedAt}
+                      {app.submittedAt.startsWith("Recently")
+                        ? app.submittedAt
+                        : `Submitted: ${app.submittedAt}`}
                     </span>
                   </div>
                 </div>
@@ -472,7 +505,9 @@ export default function ApplicationsTrackingPage() {
                             {app.amount}
                           </span>
                           <span className="text-stone-400">
-                            {app.submittedAt}
+                            {app.submittedAt.startsWith("Recently")
+                              ? app.submittedAt
+                              : `Submitted: ${app.submittedAt}`}
                           </span>
                         </div>
                       </div>
