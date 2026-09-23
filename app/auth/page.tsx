@@ -151,6 +151,7 @@ function AuthContent() {
           email: email.trim(),
           password,
           options: {
+            emailRedirectTo: typeof window !== "undefined" ? `${window.location.origin}/auth/confirm` : undefined,
             data: {
               full_name: name.trim(),
               role: "student",
@@ -372,7 +373,7 @@ function AuthContent() {
                   <span className="font-semibold text-emerald-200 underline underline-offset-2 decoration-emerald-400/50">
                     {email}
                   </span>
-                  . Please check your inbox and click the confirmation link to activate your account.
+                  . Click the link in the email to verify your account and sign in.
                 </p>
               </div>
 
