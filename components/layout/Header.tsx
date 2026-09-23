@@ -11,6 +11,7 @@ import {
   Moon,
   CheckCircle2,
   CheckCheck,
+  ShieldCheck,
 } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 import { useNotifications } from "@/lib/context/NotificationContext";
@@ -34,6 +35,8 @@ export function Header({
   const [searchQuery, setSearchQuery] = useState("");
   const profile = useUserProfile();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+
+  const isOfficerOrAdmin = profile.role === "admin" || profile.role === "nodal_officer";
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,13 +101,20 @@ export function Header({
         </div>
       </form>
 
-      {/* Right: Actions (DBT badge, Theme Toggle, Notification Bell, User Avatar) */}
+      {/* Right: Actions (Role badge, Theme Toggle, Notification Bell, User Avatar) */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* DBT Verified Badge */}
-        <div className="hidden lg:flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 border border-emerald-200/80 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/60">
-          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-          <span>DBT Active (SBI **9412)</span>
-        </div>
+        {/* Role Badge */}
+        {isOfficerOrAdmin ? (
+          <div className="hidden lg:flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 border border-amber-200/80 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/60">
+            <ShieldCheck className="h-3.5 w-3.5 text-amber-600" />
+            <span>Officer Portal</span>
+          </div>
+        ) : (
+          <div className="hidden lg:flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 border border-emerald-200/80 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/60">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+            <span>DBT Active (SBI **9412)</span>
+          </div>
+        )}
 
         {/* Theme Toggle Button */}
         <button

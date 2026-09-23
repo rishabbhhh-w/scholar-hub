@@ -1,11 +1,10 @@
-"use client";
-
 import React from "react";
 import Link from "next/link";
-import { GraduationCap, ArrowUpRight, Clock, Sparkles, Check, Bookmark, Loader2 } from "lucide-react";
+import { GraduationCap, ArrowUpRight, Clock, Sparkles, Check, Bookmark, Loader2, Edit3, Users } from "lucide-react";
 import { Scholarship } from "@/lib/data/scholarships";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useUserProfile } from "@/lib/hooks/useUserProfile";
 
 interface ScholarshipCardProps {
   scholarship: Scholarship;
@@ -13,10 +12,13 @@ interface ScholarshipCardProps {
   onApply?: (scholarship: Scholarship) => void;
   onQuickApply?: (scholarship: Scholarship) => void;
   onViewDetails?: (scholarship: Scholarship) => void;
+  onEditScheme?: (scholarship: Scholarship) => void;
   isBookmarked?: boolean;
   onToggleBookmark?: (id: string) => void;
   compact?: boolean;
   isApplying?: boolean;
+  userRole?: string;
+  isAdmin?: boolean;
 }
 
 export function ScholarshipCard({
@@ -25,11 +27,22 @@ export function ScholarshipCard({
   onApply,
   onQuickApply,
   onViewDetails,
+  onEditScheme,
   isBookmarked = false,
   onToggleBookmark,
   compact = false,
   isApplying = false,
+  userRole,
+  isAdmin,
 }: ScholarshipCardProps) {
+  const profile = useUserProfile();
+  const isAdminOrOfficer =
+    Boolean(isAdmin) ||
+    userRole === "admin" ||
+    userRole === "nodal_officer" ||
+    profile.role === "admin" ||
+    profile.role === "nodal_officer";
+
   // Format deadline as "Closes DD MMM YYYY" and check if within 7 days
   const formatDeadlineInfo = (deadlineStr: string) => {
     if (!deadlineStr) return { text: "Open", isUrgent: false };
@@ -86,7 +99,7 @@ export function ScholarshipCard({
               >
                 {scholarship.title}
               </h4>
-              {onToggleBookmark && (
+              {onToggleBookmark && !isAdminOrOfficer && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -147,49 +160,78 @@ export function ScholarshipCard({
 
       {!compact && (
         <div className="mt-5 flex items-center justify-between gap-2 pt-3 border-t border-stone-100 dark:border-[#193c30]">
-          {/* Check Eligibility Button */}
-          <Link href="/eligibility">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="text-xs h-9 border-stone-200 text-stone-700 hover:bg-stone-50 dark:border-[#193c30] dark:text-stone-300 dark:hover:bg-[#132820]"
-            >
-              Check Eligibility
-            </Button>
-          </Link>
+          {isAdminOrOfficer ? (
+            /* ADMIN / OFFICER ACTIONS */
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => (onEditScheme ? onEditScheme(scholarship) : onViewDetails && onViewDetails(scholarship))}
+                className="text-xs h-9 border-stone-200 text-stone-700 hover:bg-stone-50 dark:border-[#193c30] dark:text-stone-300 dark:hover:bg-[#132820]"
+              >
+                <Edit3 className="h-3.5 w-3.5 mr-1" />
+                <span>Edit Scheme</span>
+              </Button>
 
-          {/* Apply Now / Applied Button */}
-          {isApplied ? (
-            <Button
-              type="button"
-              size="sm"
-              disabled
-              className="h-9 bg-emerald-700 text-white rounded-xl text-xs gap-1.5 px-4 opacity-90 cursor-not-allowed dark:bg-emerald-600"
-            >
-              <Check className="h-4 w-4 stroke-[3]" />
-              <span>Applied ✓</span>
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              size="sm"
-              disabled={isApplying}
-              onClick={() => (onApply ? onApply(scholarship) : onQuickApply && onQuickApply(scholarship))}
-              className="h-9 bg-[#064e3b] hover:bg-[#053d2e] text-white rounded-xl text-xs gap-1.5 px-4 shadow-sm transition-all active:scale-[0.98] dark:bg-emerald-600 dark:hover:bg-emerald-500"
-            >
-              {isApplying ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  <span>Applying...</span>
-                </>
-              ) : (
-                <>
-                  <span>Apply Now</span>
+              <Link href="/admin/applications">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-9 bg-[#064e3b] hover:bg-[#053d2e] text-white rounded-xl text-xs gap-1.5 px-3.5 shadow-sm transition-all active:scale-[0.98] dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  <span>View Applicants</span>
                   <ArrowUpRight className="h-3.5 w-3.5" />
-                </>
+                </Button>
+              </Link>
+            </>
+          ) : (
+            /* STUDENT ACTIONS */
+            <>
+              <Link href="/eligibility">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-9 border-stone-200 text-stone-700 hover:bg-stone-50 dark:border-[#193c30] dark:text-stone-300 dark:hover:bg-[#132820]"
+                >
+                  Check Eligibility
+                </Button>
+              </Link>
+
+              {isApplied ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled
+                  className="h-9 bg-emerald-700 text-white rounded-xl text-xs gap-1.5 px-4 opacity-90 cursor-not-allowed dark:bg-emerald-600"
+                >
+                  <Check className="h-4 w-4 stroke-[3]" />
+                  <span>Applied ✓</span>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={isApplying}
+                  onClick={() => (onApply ? onApply(scholarship) : onQuickApply && onQuickApply(scholarship))}
+                  className="h-9 bg-[#064e3b] hover:bg-[#053d2e] text-white rounded-xl text-xs gap-1.5 px-4 shadow-sm transition-all active:scale-[0.98] dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                >
+                  {isApplying ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Applying...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Apply Now</span>
+                      <ArrowUpRight className="h-3.5 w-3.5" />
+                    </>
+                  )}
+                </Button>
               )}
-            </Button>
+            </>
           )}
         </div>
       )}

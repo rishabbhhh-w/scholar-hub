@@ -26,7 +26,11 @@ import {
   getUserAppliedScholarshipIds,
 } from "@/lib/services/applications";
 
+import { useUserProfile } from "@/lib/hooks/useUserProfile";
+
 function ScholarshipsContent() {
+  const profile = useUserProfile();
+  const isOfficerOrAdmin = profile.role === "admin" || profile.role === "nodal_officer";
   const searchParams = useSearchParams();
   const initialQuery = searchParams ? searchParams.get("q") || searchParams.get("query") || "" : "";
 
@@ -234,13 +238,15 @@ function ScholarshipsContent() {
         <div>
           <div className="inline-flex items-center gap-2 rounded-full bg-[#eaf5ea] px-3.5 py-1 text-xs font-semibold text-[#064e3b] dark:bg-emerald-950 dark:text-emerald-300 mb-2">
             <Sparkles className="h-3.5 w-3.5" />
-            <span>DBT Direct Transfer Desk</span>
+            <span>{isOfficerOrAdmin ? "Admin Control Desk" : "DBT Direct Transfer Desk"}</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-stone-900 dark:text-white tracking-tight">
-            Scholarship Discovery
+            {isOfficerOrAdmin ? "Manage Scholarships" : "Scholarship Discovery"}
           </h2>
           <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
-            Browse verified Central and State affirmative action scholarships for ST/SC/OBC students.
+            {isOfficerOrAdmin
+              ? "Oversee affirmative action schemes, update eligibility criteria, and scrutinize applicant queues."
+              : "Browse verified Central and State affirmative action scholarships for ST/SC/OBC students."}
           </p>
         </div>
 
@@ -428,6 +434,7 @@ function ScholarshipsContent() {
             <ScholarshipCard
               key={scholarship.id}
               scholarship={scholarship}
+              userRole={profile.role}
               isApplied={appliedScholarshipIds.includes(scholarship.id)}
               isApplying={applyingScholarshipId === scholarship.id}
               onApply={handleApply}
