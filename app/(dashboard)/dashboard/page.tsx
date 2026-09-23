@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
-  GraduationCap,
   Sparkles,
   CheckCircle2,
   Clock,
@@ -11,13 +11,10 @@ import {
   FileText,
   TrendingUp,
   ArrowUpRight,
-  ShieldCheck,
   Calendar,
-  IndianRupee,
-  ChevronRight,
   Bell,
-  User,
   RefreshCw,
+  Award,
 } from "lucide-react";
 import {
   PieChart,
@@ -31,52 +28,63 @@ import {
   Tooltip,
 } from "recharts";
 import { createClient } from "@/lib/supabase/client";
-import { SCHOLARSHIPS } from "@/lib/data/scholarships";
+import { Scholarship } from "@/lib/data/scholarships";
 import { ScholarshipCard } from "@/components/shared/ScholarshipCard";
 import { DetailModal } from "@/components/shared/DetailModal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getInitials } from "@/lib/hooks/useUserProfile";
+import { useToast } from "@/components/shared/Toast";
+import {
+  applyToScholarship,
+  getUserAppliedScholarshipIds,
+} from "@/lib/services/applications";
 
-const STATUS_DATA = [
-  { name: "Sanctioned & Disbursed", value: 3, color: "#064e3b" },
-  { name: "Under Verification", value: 4, color: "#10b981" },
-  { name: "Action Required", value: 1, color: "#f59e0b" },
-  { name: "Drafts", value: 1, color: "#94a3b8" },
-];
-
-const DISBURSEMENT_DATA = [
-  { month: "May", amount: 37000 },
-  { month: "Jun", amount: 37000 },
-  { month: "Jul", amount: 37000 },
-  { month: "Aug", amount: 42000 },
-  { month: "Sep (Est)", amount: 74000 },
-];
+interface UpcomingDeadlineItem {
+  id: string;
+  title: string;
+  deadline: string;
+  closesFormatted: string;
+  daysRemaining: number;
+  urgent: boolean;
+}
 
 export default function StudentDashboardPage() {
+  const router = useRouter();
+  const { toast } = useToast();
   const [mounted, setMounted] = useState(false);
-  const [selectedScholarship, setSelectedScholarship] = useState<any>(null);
+  const [selectedScholarship, setSelectedScholarship] = useState<Scholarship | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
-  // Real Supabase State
+  // User Profile Data
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>("");
   const [userRole, setUserRole] = useState<string>("student");
   const [userCategory, setUserCategory] = useState<string>("ST");
   const [userState, setUserState] = useState<string>("Jharkhand");
   const [userInstitution, setUserInstitution] = useState<string>("Central University of Jharkhand");
 
+  // Dynamic Real KPIs
+  const [matchedCount, setMatchedCount] = useState<number>(0);
   const [applicationCount, setApplicationCount] = useState<number>(0);
   const [documentCount, setDocumentCount] = useState<number>(0);
   const [flaggedDocCount, setFlaggedDocCount] = useState<number>(0);
+  const [profileCompletion, setProfileCompletion] = useState<number>(0);
+
+  // Top Matched Fellowship & Deadlines
+  const [topFellowship, setTopFellowship] = useState<Scholarship | null>(null);
+  const [upcomingDeadlines, setUpcomingDeadlines] = useState<UpcomingDeadlineItem[]>([]);
   const [recentNotifications, setRecentNotifications] = useState<any[]>([]);
+  const [appliedScholarshipIds, setAppliedScholarshipIds] = useState<string[]>([]);
+  const [isApplyingTop, setIsApplyingTop] = useState(false);
 
   const [isSupabaseLoaded, setIsSupabaseLoaded] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const supabase = createClient();
 
-  const loadSupabaseDashboardData = async () => {
+  const loadDashboardData = async () => {
     setIsSupabaseLoaded(false);
     setFetchError(null);
 
@@ -86,6 +94,8 @@ export default function StudentDashboardPage() {
       } = await supabase.auth.getUser();
 
       if (user) {
+        setCurrentUserId(user.id);
+
         // 1. Fetch Profile
         const { data: profile } = await supabase
           .from("profiles")
@@ -93,30 +103,40 @@ export default function StudentDashboardPage() {
           .eq("id", user.id)
           .single();
 
-        if (profile?.full_name) {
-          setUserName(profile.full_name);
+        let resolvedName = "Scholar User";
+        let resolvedCategory = "ST";
+        let resolvedState = "Jharkhand";
+        let resolvedInstitution = "Central University of Jharkhand";
+
+        if (profile) {
+          if (profile.full_name) resolvedName = profile.full_name;
+          if (profile.role) setUserRole(profile.role);
+          if (profile.category) resolvedCategory = profile.category;
+          if (profile.state) resolvedState = profile.state;
+          if (profile.institution) resolvedInstitution = profile.institution;
         } else if (user.user_metadata?.full_name) {
-          setUserName(user.user_metadata.full_name);
-        } else if (user.email) {
-          setUserName(user.email.split("@")[0]);
-        } else {
-          setUserName("Scholar User");
+          resolvedName = user.user_metadata.full_name;
         }
 
-        if (profile?.role) setUserRole(profile.role);
-        if (profile?.category) setUserCategory(profile.category);
-        if (profile?.state) setUserState(profile.state);
-        if (profile?.institution) setUserInstitution(profile.institution);
+        setUserName(resolvedName);
+        setUserCategory(resolvedCategory);
+        setUserState(resolvedState);
+        setUserInstitution(resolvedInstitution);
 
-        // 2. Applications count
-        const { count: appCount, error: appError } = await supabase
-          .from("applications")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", user.id);
+        // Calculate Profile Completion %
+        let readyPct = 0;
+        if (profile?.full_name?.trim()) readyPct += 25;
+        if (profile?.category?.trim()) readyPct += 25;
+        if (profile?.state?.trim()) readyPct += 25;
+        if (profile?.institution?.trim()) readyPct += 25;
+        setProfileCompletion(readyPct);
 
-        if (!appError && appCount !== null) setApplicationCount(appCount);
+        // 2. Applications Count & Applied IDs
+        const appliedIds = await getUserAppliedScholarshipIds(supabase, user.id);
+        setAppliedScholarshipIds(appliedIds);
+        setApplicationCount(appliedIds.length);
 
-        // 3. Documents count & flagged count
+        // 3. Documents Count & Flagged Count
         const { count: docsTotal } = await supabase
           .from("documents")
           .select("*", { count: "exact", head: true })
@@ -128,10 +148,94 @@ export default function StudentDashboardPage() {
           .eq("user_id", user.id)
           .eq("status", "flagged");
 
-        if (docsTotal !== null) setDocumentCount(docsTotal);
-        if (docsFlagged !== null) setFlaggedDocCount(docsFlagged);
+        setDocumentCount(docsTotal || 0);
+        setFlaggedDocCount(docsFlagged || 0);
 
-        // 4. Notifications
+        // 4. Fetch Active Scholarships from Supabase
+        const { data: allActiveSchs } = await supabase
+          .from("scholarships")
+          .select("*")
+          .eq("status", "active")
+          .order("deadline", { ascending: true });
+
+        if (allActiveSchs && allActiveSchs.length > 0) {
+          // Count matched where user's category is in category_eligible
+          const matchingSchs = allActiveSchs.filter((item: any) => {
+            const eligArray: string[] = Array.isArray(item.category_eligible)
+              ? item.category_eligible
+              : typeof item.category_eligible === "string"
+              ? item.category_eligible.replace(/[{}]/g, "").split(",")
+              : ["ST", "SC", "OBC", "General"];
+
+            return eligArray.includes(resolvedCategory) || eligArray.includes("All");
+          });
+
+          setMatchedCount(matchingSchs.length);
+
+          // Top Matched Fellowship
+          const topOne = matchingSchs[0] || allActiveSchs[0];
+          if (topOne) {
+            const eligibleTags = Array.isArray(topOne.category_eligible)
+              ? topOne.category_eligible
+              : [resolvedCategory];
+
+            setTopFellowship({
+              id: topOne.id,
+              slug: topOne.id,
+              title: topOne.title,
+              ministry: "Ministry of Tribal Affairs",
+              category: (eligibleTags[0] as any) || resolvedCategory,
+              educationLevel:
+                topOne.level === "PhD"
+                  ? "Ph.D. / Fellowship"
+                  : (topOne.level as any) || "Post-Matric",
+              matchScore: 96,
+              deadline: topOne.deadline,
+              closingDateFormatted: `Closes ${new Date(topOne.deadline).toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}`,
+              amount: Number(topOne.amount_monthly) || 37000,
+              amountFormatted: `₹${Number(topOne.amount_monthly || 37000).toLocaleString("en-IN")} / month`,
+              amountPeriod: "month",
+              description: topOne.description,
+              eligibilityCriteria: [
+                `Eligible for ${resolvedCategory} scholars`,
+                "Enrolled in recognized University",
+              ],
+              requiredDocuments: ["Aadhaar", "Income Certificate", "Caste Certificate"],
+              benefits: ["Monthly DBT Stipend", "Academic Research Grant"],
+              selectionProcess: "State Nodal Officer Merit Review",
+              sponsoringBody: "Central Ministry",
+              tags: eligibleTags,
+              genderEligibility: "All",
+            });
+          }
+
+          // Upcoming Deadlines (within 60 days or nearest)
+          const now = Date.now();
+          const deadlinesList: UpcomingDeadlineItem[] = allActiveSchs.map((sch: any) => {
+            const dDate = new Date(sch.deadline);
+            const diffDays = Math.ceil((dDate.getTime() - now) / (1000 * 60 * 60 * 24));
+            return {
+              id: sch.id,
+              title: sch.title,
+              deadline: sch.deadline,
+              closesFormatted: dDate.toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              }),
+              daysRemaining: diffDays,
+              urgent: diffDays >= 0 && diffDays <= 15,
+            };
+          }).filter((item) => item.daysRemaining >= 0);
+
+          setUpcomingDeadlines(deadlinesList.slice(0, 4));
+        }
+
+        // 5. Recent Notifications from Supabase
         const { data: notifs } = await supabase
           .from("notifications")
           .select("*")
@@ -140,12 +244,10 @@ export default function StudentDashboardPage() {
           .limit(3);
 
         if (notifs) setRecentNotifications(notifs);
-      } else {
-        setUserName("Scholar User");
       }
     } catch (err: any) {
-      setFetchError("Unable to sync live data with Supabase. Showing cached portal state.");
-      setUserName("Scholar User");
+      console.error("Dashboard data load error:", err);
+      setFetchError("Unable to load live dashboard stats. Please check connection.");
     } finally {
       setIsSupabaseLoaded(true);
     }
@@ -153,24 +255,60 @@ export default function StudentDashboardPage() {
 
   useEffect(() => {
     setMounted(true);
-    loadSupabaseDashboardData();
+    loadDashboardData();
   }, []);
 
-  const featured = SCHOLARSHIPS[0];
+  const handleApplyTopFellowship = async (scholarship: Scholarship) => {
+    if (!currentUserId) {
+      toast.error("Please sign in to apply.");
+      return;
+    }
+
+    if (appliedScholarshipIds.includes(scholarship.id)) {
+      router.push("/applications");
+      return;
+    }
+
+    setIsApplyingTop(true);
+    try {
+      const result = await applyToScholarship(
+        supabase,
+        currentUserId,
+        scholarship.id,
+        scholarship.title
+      );
+
+      if (result.success) {
+        setAppliedScholarshipIds((prev) => [...prev, scholarship.id]);
+        setApplicationCount((prev) => prev + 1);
+        toast.success("Application submitted!");
+        setTimeout(() => {
+          router.push("/applications");
+        }, 1200);
+      } else {
+        toast.error(result.error || "Failed to submit application.");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to apply.");
+    } finally {
+      setIsApplyingTop(false);
+    }
+  };
+
   const userInitials = getInitials(userName);
 
   return (
     <div className="space-y-8">
-      {/* Network / Supabase error fallback banner */}
+      {/* Error Retry Banner */}
       {fetchError && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900 flex items-center justify-between dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-900 flex items-center justify-between dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200">
           <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
             <span>{fetchError}</span>
           </div>
           <button
-            onClick={loadSupabaseDashboardData}
-            className="flex items-center gap-1 rounded-lg bg-amber-200 px-3 py-1 font-semibold text-amber-900 hover:bg-amber-300 dark:bg-amber-900 dark:text-amber-100"
+            onClick={loadDashboardData}
+            className="flex items-center gap-1 rounded-lg bg-rose-200 px-3 py-1 font-semibold text-rose-900 hover:bg-rose-300 dark:bg-rose-900 dark:text-rose-100"
           >
             <RefreshCw className="h-3 w-3" />
             Retry
@@ -184,16 +322,13 @@ export default function StudentDashboardPage() {
           <div className="flex items-center gap-4">
             <Skeleton className="h-14 w-14 rounded-2xl shrink-0" />
             <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Skeleton className="h-7 w-48" />
-                <Skeleton className="h-5 w-24 rounded-full" />
-              </div>
+              <Skeleton className="h-7 w-48" />
               <Skeleton className="h-4 w-72" />
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Skeleton className="h-9 w-36 rounded-xl" />
-            <Skeleton className="h-9 w-36 rounded-xl" />
+            <Skeleton className="h-9 w-32 rounded-xl" />
+            <Skeleton className="h-9 w-32 rounded-xl" />
           </div>
         </div>
       ) : (
@@ -208,11 +343,11 @@ export default function StudentDashboardPage() {
                   Good afternoon, {userName}
                 </h2>
                 <Badge variant="mint" size="sm">
-                  {userRole === "admin" || userRole === "nodal_officer" ? "Nodal Officer" : `${userCategory} Candidate`}
+                  {userCategory} Candidate
                 </Badge>
               </div>
               <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
-                {userInstitution} · Aadhaar Seeded (DBT Active) · {userState} Domicile
+                {userInstitution} · {userState} Domicile · Aadhaar Linked
               </p>
             </div>
           </div>
@@ -220,11 +355,11 @@ export default function StudentDashboardPage() {
           <div className="flex items-center gap-3">
             <Link href="/eligibility">
               <Button variant="secondary" size="sm" className="text-xs">
-                Check New Eligibility
+                Check Eligibility
               </Button>
             </Link>
             <Link href="/scholarships">
-              <Button size="sm" className="bg-[#064e3b] text-white text-xs gap-1.5 dark:bg-emerald-600">
+              <Button size="sm" className="bg-[#064e3b] hover:bg-[#053d2e] text-white text-xs gap-1.5 dark:bg-emerald-600">
                 <span>Find Scholarships</span>
                 <ArrowUpRight className="h-3.5 w-3.5" />
               </Button>
@@ -233,7 +368,7 @@ export default function StudentDashboardPage() {
         </div>
       )}
 
-      {/* KPI Stat Cards Grid */}
+      {/* Real Dynamic KPI Stat Cards */}
       {!isSupabaseLoaded ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           {[1, 2, 3, 4].map((i) => (
@@ -241,10 +376,7 @@ export default function StudentDashboardPage() {
               key={i}
               className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-soft dark:border-[#193c30] dark:bg-[#0f231c] space-y-3"
             >
-              <div className="flex items-center justify-between">
-                <Skeleton className="h-4 w-20" />
-                <Skeleton className="h-8 w-8 rounded-xl" />
-              </div>
+              <Skeleton className="h-4 w-20" />
               <Skeleton className="h-8 w-16" />
               <Skeleton className="h-3 w-32" />
             </div>
@@ -252,28 +384,30 @@ export default function StudentDashboardPage() {
         </div>
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          {/* 1. Scholarships Matched */}
+          {/* 1. MATCHED: Count of active scholarships where user's category matches */}
           <div className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-soft dark:border-[#193c30] dark:bg-[#0f231c]">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-                Matched
+                MATCHED
               </span>
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
                 <Sparkles className="h-4 w-4" />
               </div>
             </div>
-            <p className="mt-3 text-3xl font-extrabold text-stone-900 dark:text-white">24</p>
+            <p className="mt-3 text-3xl font-extrabold text-stone-900 dark:text-white">
+              {matchedCount}
+            </p>
             <p className="mt-1 text-xs text-emerald-700 font-medium dark:text-emerald-400 flex items-center gap-1">
               <TrendingUp className="h-3 w-3" />
-              +4 new schemes this month
+              Matching {userCategory} Category
             </p>
           </div>
 
-          {/* 2. Applications Count from Supabase */}
+          {/* 2. APPLICATIONS: Real count from applications table */}
           <div className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-soft dark:border-[#193c30] dark:bg-[#0f231c]">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-                Applications
+                APPLICATIONS
               </span>
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-stone-100 text-stone-700 dark:bg-[#132820] dark:text-stone-300">
                 <Clock className="h-4 w-4" />
@@ -283,53 +417,58 @@ export default function StudentDashboardPage() {
               {applicationCount}
             </p>
             <p className="mt-1 text-xs text-[#064e3b] font-semibold dark:text-emerald-400">
-              Live Applications in Database
+              Submitted to Nodal Cell
             </p>
           </div>
 
-          {/* 3. Document Progress */}
+          {/* 3. DOCUMENTS: Real count from documents table */}
           <div className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-soft dark:border-[#193c30] dark:bg-[#0f231c]">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-                Documents
+                DOCUMENTS
               </span>
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400">
                 <FileText className="h-4 w-4" />
               </div>
             </div>
             <p className="mt-3 text-3xl font-extrabold text-stone-900 dark:text-white">
-              {documentCount} <span className="text-sm font-normal text-stone-400">/ 10</span>
+              {documentCount}
             </p>
-            <p className="mt-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
-              {flaggedDocCount > 0 ? `${flaggedDocCount} require attention` : "All documents verified"}
+            <p className="mt-1 text-xs font-semibold text-stone-500 dark:text-stone-400">
+              {flaggedDocCount > 0 ? `${flaggedDocCount} need attention` : "Stored in Secure Vault"}
             </p>
           </div>
 
-          {/* 4. Profile Completion */}
+          {/* 4. PROFILE READY: Calculated 25% per completed field */}
           <div className="rounded-2xl border border-stone-200/90 bg-white p-5 shadow-soft dark:border-[#193c30] dark:bg-[#0f231c]">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-                Profile Ready
+                PROFILE READY
               </span>
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
                 <CheckCircle2 className="h-4 w-4" />
               </div>
             </div>
-            <p className="mt-3 text-3xl font-extrabold text-[#064e3b] dark:text-emerald-400">82%</p>
+            <p className="mt-3 text-3xl font-extrabold text-[#064e3b] dark:text-emerald-400">
+              {profileCompletion}%
+            </p>
             <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-stone-100 dark:bg-[#193c30]">
-              <div className="h-full rounded-full bg-[#064e3b] dark:bg-emerald-500 w-[82%]" />
+              <div
+                className="h-full rounded-full bg-[#064e3b] dark:bg-emerald-500 transition-all duration-500"
+                style={{ width: `${profileCompletion}%` }}
+              />
             </div>
           </div>
         </div>
       )}
 
-      {/* Recent Supabase Notifications Box */}
+      {/* Recent Notifications (Last 3 from Supabase) */}
       {recentNotifications.length > 0 && (
         <div className="rounded-3xl border border-stone-200/90 bg-white p-6 shadow-soft dark:border-[#193c30] dark:bg-[#0f231c] space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-base font-bold text-stone-900 dark:text-white flex items-center gap-2">
               <Bell className="h-4 w-4 text-[#064e3b] dark:text-emerald-400" />
-              Recent Supabase Notifications
+              Recent Notifications
             </h3>
             <Link
               href="/notifications"
@@ -343,13 +482,13 @@ export default function StudentDashboardPage() {
             {recentNotifications.map((n) => (
               <div
                 key={n.id}
-                className="flex items-start justify-between p-3 rounded-2xl bg-stone-50 dark:bg-[#132820] text-xs"
+                className="flex items-start justify-between p-3.5 rounded-2xl bg-stone-50 dark:bg-[#132820] text-xs"
               >
                 <div>
                   <p className="font-bold text-stone-900 dark:text-white">
-                    {n.title || n.message}
+                    {n.title}
                   </p>
-                  <p className="text-stone-500 mt-0.5">{n.message}</p>
+                  <p className="text-stone-600 dark:text-stone-300 mt-0.5">{n.message}</p>
                 </div>
                 <Badge variant={n.is_read ? "subtle" : "mint"} size="sm">
                   {n.is_read ? "Read" : "New"}
@@ -360,186 +499,83 @@ export default function StudentDashboardPage() {
         </div>
       )}
 
-      {/* Main Grid: Left 8 Cols for Highlight Scheme & Charts, Right 4 Cols for Deadlines */}
+      {/* Main Grid: Top Fellowship & Upcoming Deadlines */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-8 space-y-8">
-          {/* Top Recommendation Showcase Card */}
+        {/* Left Column: Top Matched Fellowship */}
+        <div className="lg:col-span-8 space-y-6">
           <div className="rounded-3xl border border-stone-200/90 bg-white p-6 shadow-soft dark:border-[#193c30] dark:bg-[#0f231c]">
             <div className="flex items-center justify-between pb-4 border-b border-stone-100 dark:border-[#193c30]">
               <div className="flex items-center gap-2">
                 <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-ping" />
                 <h3 className="text-base font-bold text-stone-900 dark:text-white">
-                  Top Matched Fellowship for You
+                  Top Matched Fellowship
                 </h3>
               </div>
               <Link
-                href="/recommendations"
-                className="text-xs font-semibold text-emerald-700 hover:underline dark:text-emerald-400 flex items-center gap-1"
+                href="/scholarships"
+                className="text-xs font-semibold text-emerald-700 hover:underline dark:text-emerald-400"
               >
-                View all recommendations <ChevronRight className="h-3.5 w-3.5" />
+                Explore all schemes
               </Link>
             </div>
 
             <div className="mt-5">
-              <ScholarshipCard
-                scholarship={featured}
-                onViewDetails={(s) => {
-                  setSelectedScholarship(s);
-                  setModalOpen(true);
-                }}
-                onQuickApply={(s) => {
-                  setSelectedScholarship(s);
-                  setModalOpen(true);
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Charts Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="rounded-3xl border border-stone-200/90 bg-white p-5 shadow-soft dark:border-[#193c30] dark:bg-[#0f231c]">
-              <h4 className="text-sm font-bold text-stone-900 dark:text-white mb-1">
-                Application Pipeline
-              </h4>
-              <p className="text-xs text-stone-500 dark:text-stone-400 mb-4">
-                Current status of submitted dossiers
-              </p>
-              <div className="h-52 w-full">
-                {mounted ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={STATUS_DATA}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={52}
-                        outerRadius={75}
-                        paddingAngle={4}
-                        dataKey="value"
-                      >
-                        {STATUS_DATA.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-xs text-stone-400">Loading chart...</div>
-                )}
-              </div>
-              <div className="mt-2 flex flex-wrap justify-center gap-3 text-[11px]">
-                {STATUS_DATA.map((item) => (
-                  <div key={item.name} className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="text-stone-600 dark:text-stone-300 font-medium">{item.name} ({item.value})</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-stone-200/90 bg-white p-5 shadow-soft dark:border-[#193c30] dark:bg-[#0f231c]">
-              <h4 className="text-sm font-bold text-stone-900 dark:text-white mb-1">
-                Direct Benefit Transfer (DBT)
-              </h4>
-              <p className="text-xs text-stone-500 dark:text-stone-400 mb-4">
-                Monthly fellowship credits received via PFMS
-              </p>
-              <div className="h-52 w-full">
-                {mounted ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={DISBURSEMENT_DATA}>
-                      <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} />
-                      <YAxis stroke="#94a3b8" fontSize={11} tickFormatter={(val) => `₹${val/1000}k`} />
-                      <Tooltip formatter={(value: any) => [`₹${value.toLocaleString()}`, "DBT Credit"]} />
-                      <Bar dataKey="amount" fill="#064e3b" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-xs text-stone-400">Loading chart...</div>
-                )}
-              </div>
-              <div className="mt-2 text-center text-xs text-emerald-800 font-semibold dark:text-emerald-400">
-                Total Received FY 2026-27: ₹1,53,000
-              </div>
+              {topFellowship ? (
+                <ScholarshipCard
+                  scholarship={topFellowship}
+                  isApplied={appliedScholarshipIds.includes(topFellowship.id)}
+                  isApplying={isApplyingTop}
+                  onApply={handleApplyTopFellowship}
+                  onViewDetails={(s) => {
+                    setSelectedScholarship(s);
+                    setModalOpen(true);
+                  }}
+                />
+              ) : (
+                <div className="py-8 text-center text-xs text-stone-500">
+                  No active schemes matching your criteria currently.
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Right Column */}
+        {/* Right Column: Upcoming Deadlines */}
         <div className="lg:col-span-4 space-y-6">
-          <div className="rounded-3xl border border-amber-200/90 bg-amber-50/70 p-5 dark:border-amber-900/60 dark:bg-amber-950/20">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <h4 className="text-sm font-bold text-amber-950 dark:text-amber-200">
-                  Action Required: Document Vault
-                </h4>
-                <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-300 leading-relaxed">
-                  Income Certificate FY 2026-27 and Bonafide seal need verification before nodal review deadline.
-                </p>
-                <Link href="/documents" className="mt-3 inline-block">
-                  <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white text-xs rounded-xl">
-                    Resolve in Document Vault
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </div>
-
           <div className="rounded-3xl border border-stone-200/90 bg-white p-5 shadow-soft dark:border-[#193c30] dark:bg-[#0f231c]">
             <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-[#193c30]">
               <h4 className="text-sm font-bold text-stone-900 dark:text-white flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-[#064e3b] dark:text-emerald-400" />
                 Upcoming Deadlines
               </h4>
-              <span className="text-[11px] text-stone-400">Sep - Dec 2026</span>
+              <span className="text-[11px] text-stone-400">Next 60 Days</span>
             </div>
 
             <div className="mt-3 space-y-3">
-              {[
-                {
-                  title: "National Fellowship for ST Students",
-                  closes: "31 Oct 2026",
-                  daysLeft: "43 days left",
-                  urgent: true,
-                },
-                {
-                  title: "Pre-Matric Tribal Scholarship",
-                  closes: "30 Sep 2026",
-                  daysLeft: "12 days left",
-                  urgent: true,
-                },
-                {
-                  title: "Post-Matric Scholarship for ST",
-                  closes: "15 Nov 2026",
-                  daysLeft: "58 days left",
-                  urgent: false,
-                },
-                {
-                  title: "National Overseas Scholarship",
-                  closes: "15 Dec 2026",
-                  daysLeft: "88 days left",
-                  urgent: false,
-                },
-              ].map((d, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between rounded-xl border border-stone-100 p-3 bg-stone-50/50 dark:border-[#193c30] dark:bg-[#132820]"
-                >
-                  <div className="min-w-0 flex-1 pr-2">
-                    <p className="text-xs font-bold text-stone-800 dark:text-stone-200 truncate">
-                      {d.title}
-                    </p>
-                    <p className="text-[11px] text-stone-500 dark:text-stone-400">
-                      Closes {d.closes}
-                    </p>
+              {upcomingDeadlines.length === 0 ? (
+                <p className="text-xs text-stone-500 py-3 text-center">
+                  No deadlines approaching in the next 60 days.
+                </p>
+              ) : (
+                upcomingDeadlines.map((d) => (
+                  <div
+                    key={d.id}
+                    className="flex items-center justify-between rounded-xl border border-stone-100 p-3 bg-stone-50/50 dark:border-[#193c30] dark:bg-[#132820]"
+                  >
+                    <div className="min-w-0 flex-1 pr-2">
+                      <p className="text-xs font-bold text-stone-800 dark:text-stone-200 truncate" title={d.title}>
+                        {d.title}
+                      </p>
+                      <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">
+                        Closes {d.closesFormatted}
+                      </p>
+                    </div>
+                    <Badge variant={d.urgent ? "warning" : "subtle"} size="sm">
+                      {d.daysRemaining} days left
+                    </Badge>
                   </div>
-                  <Badge variant={d.urgent ? "warning" : "subtle"} size="sm">
-                    {d.daysLeft}
-                  </Badge>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -549,6 +585,11 @@ export default function StudentDashboardPage() {
         scholarship={selectedScholarship}
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
+        onApplySuccess={() => {
+          if (selectedScholarship) {
+            handleApplyTopFellowship(selectedScholarship);
+          }
+        }}
       />
     </div>
   );

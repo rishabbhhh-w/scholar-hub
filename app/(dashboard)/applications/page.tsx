@@ -1,36 +1,39 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   Clock,
   CheckCircle2,
   AlertCircle,
   Building2,
+  Calendar,
   FileText,
-  UserCheck,
-  ChevronRight,
-  Download,
-  ExternalLink,
   Search,
-  Filter,
-  Layers,
-  ListFilter,
   Plus,
   RefreshCw,
+  LayoutGrid,
+  List,
+  Download,
+  AlertTriangle,
+  ArrowRight,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Modal } from "@/components/ui/modal";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Modal } from "@/components/ui/modal";
+import { useToast } from "@/components/shared/Toast";
+import { applyToScholarship } from "@/lib/services/applications";
 
 export interface DBApplication {
   id: string;
   trackingNumber: string;
   scholarshipTitle: string;
   scholarshipId: string;
-  ministry: string;
   amount: string;
+  deadline: string;
+  deadlineFormatted: string;
   status: "pending" | "under_review" | "approved" | "rejected" | "disbursed";
   submittedAt: string;
   updatedAt: string;
@@ -47,8 +50,10 @@ export default function ApplicationsTrackingPage() {
   const [availableScholarships, setAvailableScholarships] = useState<any[]>([]);
   const [selectedScholarshipId, setSelectedScholarshipId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const supabase = createClient();
+  const { toast } = useToast();
 
   const fetchUserApplications = async () => {
     setLoading(true);
@@ -58,40 +63,64 @@ export default function ApplicationsTrackingPage() {
       } = await supabase.auth.getUser();
 
       if (user) {
-        // Fetch applications
+        setCurrentUserId(user.id);
+
+        // Fetch applications joined with scholarships
         const { data: apps, error } = await supabase
           .from("applications")
-          .select("id, tracking_number, status, submitted_at, updated_at, notes, scholarship_id, scholarships(title, amount_monthly)")
+          .select(
+            "id, tracking_number, status, submitted_at, updated_at, notes, scholarship_id, scholarships(title, amount_monthly, deadline)"
+          )
           .eq("user_id", user.id)
           .order("submitted_at", { ascending: false });
 
-        if (!error && apps) {
-          const mapped: DBApplication[] = apps.map((item: any) => ({
-            id: item.id,
-            trackingNumber: item.tracking_number || `NSH-2026-${item.id.slice(0, 6).toUpperCase()}`,
-            scholarshipTitle: item.scholarships?.title || "National Tribal Fellowship Scheme",
-            scholarshipId: item.scholarship_id,
-            ministry: "Ministry of Tribal Affairs / State Welfare Directorate",
-            amount: item.scholarships?.amount_monthly ? `₹${(item.scholarships.amount_monthly * 12).toLocaleString()} / yr` : "₹1,20,000 / yr",
-            status: item.status || "pending",
-            submittedAt: new Date(item.submitted_at || Date.now()).toLocaleDateString("en-IN", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            }),
-            updatedAt: new Date(item.updated_at || Date.now()).toLocaleDateString("en-IN", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            }),
-            notes: item.notes,
-          }));
+        if (error) {
+          throw error;
+        }
+
+        if (apps) {
+          const mapped: DBApplication[] = apps.map((item: any) => {
+            const sch = item.scholarships;
+            const monthly = sch?.amount_monthly ? Number(sch.amount_monthly) : 10000;
+            const deadlineDate = sch?.deadline;
+
+            return {
+              id: item.id,
+              trackingNumber:
+                item.tracking_number?.startsWith("#")
+                  ? item.tracking_number
+                  : `#${item.tracking_number || "NSH-2026-" + item.id.slice(0, 6).toUpperCase()}`,
+              scholarshipTitle: sch?.title || "National Scholarship Scheme",
+              scholarshipId: item.scholarship_id,
+              amount: `₹${monthly.toLocaleString("en-IN")} / month`,
+              deadline: deadlineDate || "",
+              deadlineFormatted: deadlineDate
+                ? new Date(deadlineDate).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })
+                : "Ongoing",
+              status: (item.status as any) || "pending",
+              submittedAt: new Date(item.submitted_at || Date.now()).toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              }),
+              updatedAt: new Date(item.updated_at || Date.now()).toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              }),
+              notes: item.notes,
+            };
+          });
 
           setApplications(mapped);
           if (mapped.length > 0) setSelectedApp(mapped[0]);
         }
 
-        // Fetch scholarships list for new application modal
+        // Fetch scholarships for new application modal
         const { data: schs } = await supabase
           .from("scholarships")
           .select("id, title, amount_monthly")
@@ -100,7 +129,7 @@ export default function ApplicationsTrackingPage() {
         if (schs) setAvailableScholarships(schs);
       }
     } catch (err) {
-      // Fallback state handled gracefully
+      console.error("Error fetching applications:", err);
     } finally {
       setLoading(false);
     }
@@ -112,29 +141,34 @@ export default function ApplicationsTrackingPage() {
 
   const handleCreateApplication = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedScholarshipId) return;
+    if (!selectedScholarshipId || !currentUserId) return;
+
+    const chosen = availableScholarships.find((s) => s.id === selectedScholarshipId);
+    const title = chosen?.title || "Scholarship Scheme";
 
     setIsSubmitting(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const result = await applyToScholarship(
+        supabase,
+        currentUserId,
+        selectedScholarshipId,
+        title
+      );
 
-      if (user) {
-        const { error } = await supabase.from("applications").insert({
-          user_id: user.id,
-          scholarship_id: selectedScholarshipId,
-          status: "pending",
-        });
-
-        if (!error) {
-          setNewAppModalOpen(false);
-          setSelectedScholarshipId("");
-          await fetchUserApplications();
+      if (result.success) {
+        if (result.alreadyApplied) {
+          toast.info("You have already applied for this scholarship.");
+        } else {
+          toast.success("Application submitted!");
         }
+        setNewAppModalOpen(false);
+        setSelectedScholarshipId("");
+        await fetchUserApplications();
+      } else {
+        toast.error(result.error || "Failed to submit application.");
       }
-    } catch (err) {
-      alert("Error submitting application. Please check your network connection.");
+    } catch (err: any) {
+      toast.error(err?.message || "An error occurred.");
     } finally {
       setIsSubmitting(false);
     }
@@ -149,14 +183,35 @@ export default function ApplicationsTrackingPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "approved":
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+            <CheckCircle2 className="h-3 w-3" />
+            Approved
+          </span>
+        );
       case "disbursed":
-        return <Badge variant="mint" size="sm">Sanctioned & Disbursed</Badge>;
-      case "under_review":
-        return <Badge variant="saffron" size="sm">Under Nodal Scrutiny</Badge>;
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-bold text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+            <CheckCircle2 className="h-3 w-3" />
+            Disbursed
+          </span>
+        );
       case "rejected":
-        return <Badge variant="danger" size="sm">Defect Marked</Badge>;
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-bold text-rose-800 dark:bg-rose-950 dark:text-rose-300">
+            <AlertCircle className="h-3 w-3" />
+            Rejected
+          </span>
+        );
+      case "under_review":
+      case "pending":
       default:
-        return <Badge variant="subtle" size="sm">Submitted (Pending Review)</Badge>;
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+            <Clock className="h-3 w-3" />
+            Under Review
+          </span>
+        );
     }
   };
 
@@ -169,7 +224,7 @@ export default function ApplicationsTrackingPage() {
             Applications & Tracking
           </h2>
           <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-            Real-time tracking of dossiers with State Nodal Officers, University Welfare Desks, and PFMS.
+            Real-time status tracking with State Welfare Officers, Central Ministries, and PFMS DBT Gateway.
           </p>
         </div>
 
@@ -177,7 +232,7 @@ export default function ApplicationsTrackingPage() {
           <Button
             size="sm"
             onClick={() => setNewAppModalOpen(true)}
-            className="bg-[#064e3b] text-white text-xs gap-1.5 dark:bg-emerald-600"
+            className="bg-[#064e3b] hover:bg-[#053d2e] text-white text-xs gap-1.5 dark:bg-emerald-600"
           >
             <Plus className="h-4 w-4" />
             <span>Apply for Scheme</span>
@@ -202,7 +257,7 @@ export default function ApplicationsTrackingPage() {
                   : "text-stone-500 hover:text-stone-800 dark:text-stone-400"
               }`}
             >
-              Kanban Board
+              Kanban View
             </button>
           </div>
         </div>
@@ -212,7 +267,10 @@ export default function ApplicationsTrackingPage() {
       {loading ? (
         <div className="space-y-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="rounded-3xl border border-stone-200 bg-white p-5 dark:border-[#193c30] dark:bg-[#0f231c] space-y-3">
+            <div
+              key={i}
+              className="rounded-3xl border border-stone-200 bg-white p-5 dark:border-[#193c30] dark:bg-[#0f231c] space-y-3"
+            >
               <Skeleton className="h-4 w-32" />
               <Skeleton className="h-6 w-2/3" />
               <Skeleton className="h-3 w-1/3" />
@@ -224,20 +282,20 @@ export default function ApplicationsTrackingPage() {
         <div className="rounded-3xl border border-stone-200 bg-white p-12 text-center dark:border-[#193c30] dark:bg-[#0f231c]">
           <Clock className="h-12 w-12 text-stone-300 mx-auto mb-3" />
           <h3 className="text-base font-bold text-stone-800 dark:text-stone-200">
-            No Applications Submitted Yet
+            You haven't applied to any scholarships yet.
           </h3>
           <p className="text-xs text-stone-500 mt-1 max-w-sm mx-auto">
-            Explore active scholarships in the discovery section and submit your first online application.
+            Discover verified scholarships suited to your demographic criteria and submit your application online.
           </p>
-          <Button
-            size="sm"
-            onClick={() => setNewAppModalOpen(true)}
-            className="mt-4 bg-[#064e3b] text-white text-xs dark:bg-emerald-600"
-          >
-            Submit Application Now
-          </Button>
+          <Link href="/scholarships" className="mt-4 inline-block">
+            <Button size="sm" className="bg-[#064e3b] text-white text-xs dark:bg-emerald-600 gap-1.5">
+              <span>Browse Scholarships</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </Link>
         </div>
       ) : viewMode === "list" ? (
+        /* List View */
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Left 7 Columns: Application List */}
           <div className="lg:col-span-7 space-y-4">
@@ -262,8 +320,8 @@ export default function ApplicationsTrackingPage() {
                       <h4 className="text-base font-bold text-stone-900 dark:text-white mt-0.5">
                         {app.scholarshipTitle}
                       </h4>
-                      <p className="text-xs text-stone-500 dark:text-stone-400">
-                        {app.ministry}
+                      <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
+                        Closing Date: {app.deadlineFormatted}
                       </p>
                     </div>
 
@@ -271,11 +329,11 @@ export default function ApplicationsTrackingPage() {
                   </div>
 
                   <div className="mt-4 flex items-center justify-between text-xs pt-3 border-t border-stone-100 dark:border-[#193c30]">
-                    <span className="font-bold text-stone-900 dark:text-stone-100">
+                    <span className="font-bold text-[#064e3b] dark:text-emerald-400">
                       Amount: {app.amount}
                     </span>
                     <span className="text-stone-400">
-                      Submitted: {app.submittedAt}
+                      Applied: {app.submittedAt}
                     </span>
                   </div>
                 </div>
@@ -289,25 +347,25 @@ export default function ApplicationsTrackingPage() {
               <div className="sticky top-28 rounded-3xl border border-stone-200/90 bg-white p-6 shadow-soft dark:border-[#193c30] dark:bg-[#0f231c] space-y-6">
                 <div>
                   <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-400">
-                    REAL-TIME AUDIT TRAIL
+                    REAL-TIME APPLICATION DOSSIER
                   </span>
                   <h3 className="text-lg font-bold text-stone-900 dark:text-white mt-1">
                     {selectedApp.scholarshipTitle}
                   </h3>
                   <p className="font-mono text-xs text-stone-400 mt-0.5">
-                    Ref: {selectedApp.trackingNumber}
+                    Ref ID: {selectedApp.trackingNumber}
                   </p>
                 </div>
 
                 <div className="rounded-2xl bg-stone-50 p-3.5 border border-stone-200/80 dark:bg-[#132820] dark:border-[#193c30]">
                   <p className="text-[11px] font-bold uppercase text-stone-400">
-                    Designated Welfare Directorate
+                    Financial Benefit
                   </p>
-                  <p className="text-xs font-bold text-stone-900 dark:text-stone-100 mt-1">
-                    Shri R.K. Soren (State Nodal Officer)
+                  <p className="text-sm font-bold text-emerald-800 dark:text-emerald-400 mt-0.5">
+                    {selectedApp.amount}
                   </p>
-                  <p className="text-[11px] text-stone-500 dark:text-stone-400">
-                    Department of Scheduled Tribe Welfare
+                  <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-1">
+                    Direct Benefit Transfer (DBT) via PFMS Gateway
                   </p>
                 </div>
 
@@ -331,19 +389,19 @@ export default function ApplicationsTrackingPage() {
                     <Clock className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
                     <div>
                       <p className="font-bold text-stone-900 dark:text-white">State Nodal Officer Review</p>
-                      <p className="text-stone-500">Current Stage: {selectedApp.status.toUpperCase()}</p>
+                      <p className="text-stone-500 capitalize">Current Stage: {selectedApp.status.replace("_", " ")}</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-stone-100 dark:border-[#193c30] flex gap-2">
+                <div className="pt-4 border-t border-stone-100 dark:border-[#193c30]">
                   <Button
                     variant="secondary"
                     size="sm"
                     className="w-full text-xs"
-                    onClick={() => alert(`Downloading slip for ${selectedApp.trackingNumber}...`)}
+                    onClick={() => alert(`Downloaded acknowledgement receipt for ${selectedApp.trackingNumber}`)}
                   >
-                    <Download className="h-3.5 w-3.5 mr-1" />
+                    <Download className="h-3.5 w-3.5 mr-1.5" />
                     Download Acknowledgement Slip
                   </Button>
                 </div>
@@ -352,41 +410,74 @@ export default function ApplicationsTrackingPage() {
           </div>
         </div>
       ) : (
-        /* Kanban Board View */
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-x-auto pb-4">
+        /* Kanban View: 4 Columns (Submitted | Under Review | Approved | Rejected) */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pb-4">
           {[
-            { title: "Pending Review", status: "pending" },
-            { title: "Under Review", status: "under_review" },
-            { title: "Approved", status: "approved" },
-            { title: "Disbursed via DBT", status: "disbursed" },
+            {
+              title: "Submitted",
+              filterFn: (a: DBApplication) => a.status === "pending",
+              badgeColor: "bg-stone-200 text-stone-800",
+            },
+            {
+              title: "Under Review",
+              filterFn: (a: DBApplication) => a.status === "under_review",
+              badgeColor: "bg-amber-100 text-amber-800",
+            },
+            {
+              title: "Approved",
+              filterFn: (a: DBApplication) => a.status === "approved" || a.status === "disbursed",
+              badgeColor: "bg-emerald-100 text-emerald-800",
+            },
+            {
+              title: "Rejected",
+              filterFn: (a: DBApplication) => a.status === "rejected",
+              badgeColor: "bg-rose-100 text-rose-800",
+            },
           ].map((col) => {
-            const colApps = applications.filter((a) => a.status === col.status);
+            const colApps = applications.filter(col.filterFn);
 
             return (
               <div
-                key={col.status}
+                key={col.title}
                 className="rounded-3xl border border-stone-200/80 bg-stone-50/70 p-4 dark:border-[#193c30] dark:bg-[#0c1c16]"
               >
-                <h4 className="text-xs font-bold uppercase tracking-wider text-stone-700 dark:text-stone-300 mb-3 px-1">
-                  {col.title} ({colApps.length})
-                </h4>
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-stone-700 dark:text-stone-300">
+                    {col.title}
+                  </h4>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${col.badgeColor}`}>
+                    {colApps.length}
+                  </span>
+                </div>
+
                 <div className="space-y-3">
-                  {colApps.map((app) => (
-                    <div
-                      key={app.id}
-                      className="rounded-2xl border border-stone-200/90 bg-white p-4 shadow-soft dark:border-[#193c30] dark:bg-[#0f231c]"
-                    >
-                      <span className="font-mono text-[10px] text-stone-400">
-                        {app.trackingNumber}
-                      </span>
-                      <h5 className="text-xs font-bold text-stone-900 dark:text-white mt-1">
-                        {app.scholarshipTitle}
-                      </h5>
-                      <p className="text-[11px] text-emerald-800 dark:text-emerald-400 font-semibold mt-2">
-                        {app.amount}
-                      </p>
+                  {colApps.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-stone-200 p-4 text-center text-xs text-stone-400">
+                      No applications
                     </div>
-                  ))}
+                  ) : (
+                    colApps.map((app) => (
+                      <div
+                        key={app.id}
+                        className="rounded-2xl border border-stone-200/90 bg-white p-4 shadow-soft dark:border-[#193c30] dark:bg-[#0f231c] space-y-2"
+                      >
+                        <span className="font-mono text-[10px] text-stone-400 block">
+                          {app.trackingNumber}
+                        </span>
+                        <h5 className="text-xs font-bold text-stone-900 dark:text-white line-clamp-2">
+                          {app.scholarshipTitle}
+                        </h5>
+                        <div className="flex items-center justify-between text-[11px] pt-1">
+                          <span className="text-[#064e3b] dark:text-emerald-400 font-bold">
+                            {app.amount}
+                          </span>
+                          <span className="text-stone-400">
+                            {app.submittedAt}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             );
@@ -403,7 +494,7 @@ export default function ApplicationsTrackingPage() {
         <form onSubmit={handleCreateApplication} className="space-y-4 pt-2">
           <div>
             <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
-              Select Active Scheme
+              Select Active Scheme *
             </label>
             <select
               required
@@ -414,7 +505,7 @@ export default function ApplicationsTrackingPage() {
               <option value="">-- Choose a scholarship scheme --</option>
               {availableScholarships.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.title} (₹{(s.amount_monthly * 12).toLocaleString()} / yr)
+                  {s.title} (₹{Number(s.amount_monthly || 10000).toLocaleString("en-IN")} / month)
                 </option>
               ))}
             </select>
@@ -423,7 +514,7 @@ export default function ApplicationsTrackingPage() {
           <div className="rounded-2xl bg-stone-50 p-3.5 border border-stone-200 text-xs text-stone-600 dark:bg-[#132820] dark:border-[#193c30] dark:text-stone-300">
             <p className="font-bold text-stone-900 dark:text-white">Note:</p>
             <p className="mt-1">
-              Your profile category, domicile state, and uploaded document vault files will be automatically attached to this application.
+              Your profile category, domicile state, and verified documents will be automatically linked to this application dossier.
             </p>
           </div>
 

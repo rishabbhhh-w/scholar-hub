@@ -114,8 +114,14 @@ export function useUserProfile(): UserProfileData {
 
     fetchProfile();
 
+    const handleUpdate = () => {
+      fetchProfile();
+    };
+    window.addEventListener("notificationsUpdated", handleUpdate);
+
     return () => {
       isMounted = false;
+      window.removeEventListener("notificationsUpdated", handleUpdate);
     };
   }, []);
 

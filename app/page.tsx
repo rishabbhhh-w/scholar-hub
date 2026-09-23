@@ -21,7 +21,7 @@ import {
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { SCHOLARSHIPS } from "@/lib/data/scholarships";
+import { SCHOLARSHIPS, Scholarship } from "@/lib/data/scholarships";
 import { ScholarshipCard } from "@/components/shared/ScholarshipCard";
 import { Logo } from "@/components/shared/Logo";
 import { DetailModal } from "@/components/shared/DetailModal";
@@ -423,11 +423,11 @@ export default function LandingPage() {
               <ScholarshipCard
                 key={scholarship.id}
                 scholarship={scholarship}
-                onViewDetails={(s) => {
+                onViewDetails={(s: Scholarship) => {
                   setSelectedScholarship(s);
                   setModalOpen(true);
                 }}
-                onQuickApply={(s) => {
+                onQuickApply={(s: Scholarship) => {
                   setSelectedScholarship(s);
                   setModalOpen(true);
                 }}

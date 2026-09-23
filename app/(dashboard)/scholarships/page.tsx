@@ -3,86 +3,177 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
   Search,
-  Filter,
-  SlidersHorizontal,
   Bookmark,
   GraduationCap,
   Sparkles,
   ArrowUpDown,
   LayoutGrid,
   List,
-  Check,
   X,
   RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { SCHOLARSHIPS, Scholarship } from "@/lib/data/scholarships";
+import { Scholarship } from "@/lib/data/scholarships";
 import { ScholarshipCard } from "@/components/shared/ScholarshipCard";
 import { DetailModal } from "@/components/shared/DetailModal";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/shared/Toast";
+import {
+  applyToScholarship,
+  getUserAppliedScholarshipIds,
+} from "@/lib/services/applications";
 
 export default function ScholarshipDiscoveryPage() {
   const [scholarshipList, setScholarshipList] = useState<Scholarship[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [selectedLevel, setSelectedLevel] = useState<string>("All");
-  const [sortBy, setSortBy] = useState<"match" | "deadline" | "amount">("match");
+  const [sortBy, setSortBy] = useState<"match" | "deadline" | "amount">("deadline");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [bookmarkedIds, setBookmarkedIds] = useState<string[]>(["nfst-2026"]);
+  const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
+  const [appliedScholarshipIds, setAppliedScholarshipIds] = useState<string[]>([]);
+  const [applyingScholarshipId, setApplyingScholarshipId] = useState<string | null>(null);
 
   const [selectedScholarship, setSelectedScholarship] = useState<Scholarship | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const supabase = createClient();
+  const { toast } = useToast();
 
-  useEffect(() => {
-    async function fetchSupabaseScholarships() {
-      setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from("scholarships")
-          .select("*")
-          .order("deadline", { ascending: true });
+  const fetchScholarshipsAndApplications = async (searchTerm?: string) => {
+    setLoading(true);
+    setFetchError(null);
 
-        if (!error && data && data.length > 0) {
-          const mapped: Scholarship[] = data.map((item: any) => ({
+    try {
+      // 1. Get current logged in user
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        setCurrentUserId(user.id);
+        const appliedIds = await getUserAppliedScholarshipIds(supabase, user.id);
+        setAppliedScholarshipIds(appliedIds);
+      }
+
+      // 2. Fetch scholarships from Supabase
+      let query = supabase
+        .from("scholarships")
+        .select("*")
+        .eq("status", "active")
+        .order("deadline", { ascending: true });
+
+      if (searchTerm && searchTerm.trim()) {
+        query = query.ilike("title", `%${searchTerm.trim()}%`);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (data) {
+        const mapped: Scholarship[] = data.map((item: any) => {
+          const eligibleArray: string[] = Array.isArray(item.category_eligible)
+            ? item.category_eligible
+            : typeof item.category_eligible === "string"
+            ? item.category_eligible.replace(/[{}]/g, "").split(",")
+            : ["ST", "SC", "OBC", "General"];
+
+          return {
             id: item.id,
             slug: item.id,
             title: item.title,
             ministry: "Ministry of Tribal Affairs & Government of India",
-            category: (item.category_eligible?.[0] as any) || "ST",
-            educationLevel: item.level === "PhD" ? "Ph.D. / Fellowship" : (item.level as any) || "Post-Matric",
-            matchScore: 94,
+            category: (eligibleArray[0] as any) || "ST",
+            educationLevel:
+              item.level === "PhD"
+                ? "Ph.D. / Fellowship"
+                : (item.level as any) || "Post-Matric",
+            matchScore: 95,
             deadline: item.deadline,
-            closingDateFormatted: `Closes ${new Date(item.deadline).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`,
+            closingDateFormatted: `Closes ${new Date(item.deadline).toLocaleDateString("en-IN", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}`,
             amount: Number(item.amount_monthly) || 10000,
-            amountFormatted: `₹${Number(item.amount_monthly).toLocaleString()} / month`,
+            amountFormatted: `₹${Number(item.amount_monthly || 10000).toLocaleString("en-IN")} / month`,
             amountPeriod: "month",
-            description: item.description,
-            eligibilityCriteria: item.eligibility_criteria || ["ST / SC candidates", "Annual Income < 8 LPA"],
-            requiredDocuments: ["Income Certificate", "Caste Certificate", "Aadhaar", "Mark Sheet"],
-            benefits: ["Monthly Fellowship via DBT", "Contingency Research Grant"],
-            selectionProcess: "Direct Merit Scrutiny by State Nodal Cell",
+            description: item.description || "Government scholarship scheme.",
+            eligibilityCriteria: eligibleArray.map((c) => `${c} candidates eligible`),
+            requiredDocuments: [
+              "Aadhaar Card",
+              "Caste Certificate",
+              "Income Certificate",
+              "Marksheet",
+            ],
+            benefits: ["Monthly DBT Fellowship", "Contingency Research Grant"],
+            selectionProcess: "Direct Verification by State Nodal Officer",
             sponsoringBody: "Central Ministry",
-            tags: [item.level, item.status, "DBT Transfer"],
+            tags: eligibleArray,
             genderEligibility: "All",
-          }));
-          setScholarshipList(mapped);
-        } else {
-          setScholarshipList(SCHOLARSHIPS);
-        }
-      } catch (err) {
-        setScholarshipList(SCHOLARSHIPS);
-      } finally {
-        setLoading(false);
+          };
+        });
+
+        setScholarshipList(mapped);
       }
+    } catch (err: any) {
+      console.error("Error fetching scholarships:", err);
+      setFetchError(err?.message || "Failed to load scholarships from Supabase.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchScholarshipsAndApplications();
+  }, []);
+
+  // Handle Real-time search with debounce or live ilike
+  const handleSearchChange = (val: string) => {
+    setSearchQuery(val);
+  };
+
+  const handleApply = async (scholarship: Scholarship) => {
+    if (!currentUserId) {
+      toast.error("Please sign in to apply for scholarships.");
+      return;
     }
 
-    fetchSupabaseScholarships();
-  }, []);
+    if (appliedScholarshipIds.includes(scholarship.id)) {
+      toast.info("You have already applied for this scholarship.");
+      return;
+    }
+
+    setApplyingScholarshipId(scholarship.id);
+
+    try {
+      const result = await applyToScholarship(
+        supabase,
+        currentUserId,
+        scholarship.id,
+        scholarship.title
+      );
+
+      if (result.success) {
+        setAppliedScholarshipIds((prev) => [...prev, scholarship.id]);
+        toast.success("Application submitted!");
+      } else {
+        toast.error(result.error || "Failed to submit application.");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "An unexpected error occurred.");
+    } finally {
+      setApplyingScholarshipId(null);
+    }
+  };
 
   const toggleBookmark = (id: string) => {
     setBookmarkedIds((prev) =>
@@ -95,13 +186,12 @@ export default function ScholarshipDiscoveryPage() {
       .filter((s) => {
         const matchesSearch =
           s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          s.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          s.ministry.toLowerCase().includes(searchQuery.toLowerCase());
+          s.description.toLowerCase().includes(searchQuery.toLowerCase());
 
         const matchesCategory =
           selectedCategory === "All" ||
-          s.category === selectedCategory ||
-          s.category === "All";
+          (Array.isArray(s.tags) && s.tags.includes(selectedCategory)) ||
+          s.category === selectedCategory;
 
         const matchesLevel =
           selectedLevel === "All" ||
@@ -128,7 +218,7 @@ export default function ScholarshipDiscoveryPage() {
             Scholarship Discovery
           </h2>
           <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
-            Explore verified affirmative action schemes, national fellowships, and state grants from Supabase Database.
+            Explore verified affirmative action schemes, national fellowships, and state grants fetched live from Supabase.
           </p>
         </div>
 
@@ -167,29 +257,46 @@ export default function ScholarshipDiscoveryPage() {
               onChange={(e: any) => setSortBy(e.target.value)}
               className="bg-transparent focus:outline-none cursor-pointer"
             >
-              <option value="match">Sort: AI Match Score</option>
               <option value="deadline">Sort: Closing Date</option>
               <option value="amount">Sort: Grant Amount</option>
+              <option value="match">Sort: Match Score</option>
             </select>
           </div>
         </div>
       </div>
 
+      {/* Error state with retry */}
+      {fetchError && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-900 flex items-center justify-between dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+            <span>{fetchError}</span>
+          </div>
+          <button
+            onClick={() => fetchScholarshipsAndApplications(searchQuery)}
+            className="flex items-center gap-1 rounded-lg bg-rose-200 px-3 py-1 font-semibold text-rose-900 hover:bg-rose-300 dark:bg-rose-900 dark:text-rose-100"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Search and Filters Bar */}
       <div className="rounded-3xl border border-stone-200/90 bg-white p-5 shadow-soft dark:border-[#193c30] dark:bg-[#0f231c] space-y-4">
-        {/* Search input */}
+        {/* Search input with real-time Supabase query */}
         <div className="relative">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
           <input
             type="text"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by scheme name, description, degree level or keywords..."
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder="Search scholarships by title in real-time..."
             className="h-11 w-full rounded-xl border border-stone-200 bg-stone-50 pl-10 pr-4 text-xs sm:text-sm text-stone-900 placeholder:text-stone-400 focus:border-[#064e3b] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#064e3b] dark:border-[#193c30] dark:bg-[#132820] dark:text-white"
           />
           {searchQuery && (
             <button
-              onClick={() => setSearchQuery("")}
+              onClick={() => handleSearchChange("")}
               className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
             >
               <X className="h-4 w-4" />
@@ -239,7 +346,7 @@ export default function ScholarshipDiscoveryPage() {
 
       {/* Results Header */}
       <div className="flex items-center justify-between text-xs font-semibold text-stone-500 dark:text-stone-400 px-1">
-        <span>Showing {filteredScholarships.length} opportunities from Supabase</span>
+        <span>Showing {filteredScholarships.length} active opportunities</span>
         {bookmarkedIds.length > 0 && (
           <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400">
             <Bookmark className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
@@ -252,7 +359,10 @@ export default function ScholarshipDiscoveryPage() {
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="rounded-3xl border border-stone-200 bg-white p-6 dark:border-[#193c30] dark:bg-[#0f231c] space-y-4">
+            <div
+              key={i}
+              className="rounded-3xl border border-stone-200 bg-white p-6 dark:border-[#193c30] dark:bg-[#0f231c] space-y-4"
+            >
               <Skeleton className="h-6 w-3/4" />
               <Skeleton className="h-4 w-1/2" />
               <Skeleton className="h-16 w-full rounded-2xl" />
@@ -270,7 +380,7 @@ export default function ScholarshipDiscoveryPage() {
             No matching scholarships found
           </h3>
           <p className="text-xs text-stone-500 mt-1 max-w-sm mx-auto">
-            Try adjusting your search query or resetting filters to view all available affirmative action schemes.
+            Try adjusting your search query or resetting filters to view all active affirmative action schemes.
           </p>
           <Button
             variant="secondary"
@@ -280,7 +390,7 @@ export default function ScholarshipDiscoveryPage() {
               setSelectedCategory("All");
               setSelectedLevel("All");
             }}
-            className="mt-4"
+            className="mt-4 text-xs"
           >
             Reset All Filters
           </Button>
@@ -297,13 +407,12 @@ export default function ScholarshipDiscoveryPage() {
             <ScholarshipCard
               key={scholarship.id}
               scholarship={scholarship}
+              isApplied={appliedScholarshipIds.includes(scholarship.id)}
+              isApplying={applyingScholarshipId === scholarship.id}
+              onApply={handleApply}
               isBookmarked={bookmarkedIds.includes(scholarship.id)}
               onToggleBookmark={toggleBookmark}
               onViewDetails={(s) => {
-                setSelectedScholarship(s);
-                setModalOpen(true);
-              }}
-              onQuickApply={(s) => {
                 setSelectedScholarship(s);
                 setModalOpen(true);
               }}
@@ -318,6 +427,11 @@ export default function ScholarshipDiscoveryPage() {
         scholarship={selectedScholarship}
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
+        onApplySuccess={() => {
+          if (selectedScholarship) {
+            handleApply(selectedScholarship);
+          }
+        }}
       />
     </div>
   );

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { ToastProvider } from "@/components/shared/Toast";
 
 export const metadata: Metadata = {
   title: "Scholar Hub",
@@ -24,7 +25,9 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-[#fcfbf9] text-stone-900 antialiased selection:bg-emerald-200 selection:text-emerald-950 dark:bg-[#07130e] dark:text-stone-100">
         <ThemeProvider>
-          {children}
+          <ToastProvider>
+            {children}
+          </ToastProvider>
         </ThemeProvider>
       </body>
     </html>

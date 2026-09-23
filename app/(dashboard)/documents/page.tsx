@@ -1,26 +1,23 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   FileText,
   UploadCloud,
   CheckCircle2,
   AlertTriangle,
   Clock,
-  Eye,
   Trash2,
-  ShieldCheck,
-  Sparkles,
-  Download,
+  ExternalLink,
   RefreshCw,
-  X,
-  FileCheck,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Modal } from "@/components/ui/modal";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/shared/Toast";
 
 export interface DBDocument {
   id: string;
@@ -34,15 +31,18 @@ export interface DBDocument {
 export default function MyDocumentsPage() {
   const [documents, setDocuments] = useState<DBDocument[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState<string>("All");
-  const [previewDoc, setPreviewDoc] = useState<DBDocument | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [syncingDigilocker, setSyncingDigilocker] = useState(false);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
+  const { toast } = useToast();
 
   const fetchUserDocuments = async () => {
     setLoading(true);
+    setFetchError(null);
     try {
       const {
         data: { user },
@@ -55,12 +55,12 @@ export default function MyDocumentsPage() {
           .eq("user_id", user.id)
           .order("uploaded_at", { ascending: false });
 
-        if (!error && data) {
-          setDocuments(data);
-        }
+        if (error) throw error;
+        if (data) setDocuments(data);
       }
-    } catch (err) {
-      // Fallback handled cleanly
+    } catch (err: any) {
+      console.error("Error fetching documents:", err);
+      setFetchError(err?.message || "Failed to load documents.");
     } finally {
       setLoading(false);
     }
@@ -71,14 +71,15 @@ export default function MyDocumentsPage() {
   }, []);
 
   const readyCount = documents.filter((d) => d.status === "verified").length;
-  const attentionCount = documents.filter((d) => d.status === "flagged" || d.status === "pending").length;
+  const pendingCount = documents.filter((d) => d.status === "pending").length;
+  const flaggedCount = documents.filter((d) => d.status === "flagged").length;
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (file.size > 10 * 1024 * 1024) {
-      alert("File size exceeds maximum limit of 10MB.");
+      toast.error("File size exceeds 10MB limit.");
       return;
     }
 
@@ -88,50 +89,57 @@ export default function MyDocumentsPage() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (!user) return;
-
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
-      const filePath = `${user.id}/${fileName}`;
-
-      // Upload to Supabase Storage 'documents' bucket
-      const { error: uploadError } = await supabase.storage
-        .from("documents")
-        .upload(filePath, file, { upsert: true });
-
-      if (uploadError) {
-        alert(`Upload error: ${uploadError.message}`);
-        setIsUploading(false);
+      if (!user) {
+        toast.error("Please sign in to upload documents.");
         return;
       }
 
-      // Get public or signed URL
-      const { data: urlData } = supabase.storage.from("documents").getPublicUrl(filePath);
+      const fileExt = file.name.split(".").pop();
+      const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
+      const storagePath = `${user.id}/${Date.now()}_${safeName}`;
 
-      // Insert record into 'documents' table
+      // 1. Upload to Supabase Storage 'documents' bucket
+      const { error: uploadError } = await supabase.storage
+        .from("documents")
+        .upload(storagePath, file, { upsert: true });
+
+      if (uploadError) {
+        throw new Error(uploadError.message);
+      }
+
+      // 2. Get public or URL
+      const { data: urlData } = supabase.storage
+        .from("documents")
+        .getPublicUrl(storagePath);
+
+      // 3. Insert record into documents table
       const { error: dbError } = await supabase.from("documents").insert({
         user_id: user.id,
-        name: file.name.split(".")[0],
-        file_url: urlData.publicUrl || filePath,
+        name: file.name.replace(/\.[^/.]+$/, ""),
+        file_url: urlData?.publicUrl || storagePath,
         file_type: file.type || fileExt || "application/pdf",
         status: "pending",
       });
 
-      if (dbError) {
-        alert(`Database entry error: ${dbError.message}`);
-      } else {
-        await fetchUserDocuments();
-      }
+      if (dbError) throw dbError;
+
+      toast.success("Document uploaded successfully!");
+      await fetchUserDocuments();
     } catch (err: any) {
-      alert(err.message || "Failed to upload document.");
+      console.error("Upload error:", err);
+      toast.error(err?.message || "Failed to upload document.");
     } finally {
       setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
 
-  const handleDeleteDocument = async (docId: string, fileUrl: string) => {
-    if (!confirm("Are you sure you want to delete this document?")) return;
+  const handleDeleteDocument = async (doc: DBDocument) => {
+    if (!confirm(`Are you sure you want to delete "${doc.name}"?`)) return;
 
+    setDeletingId(doc.id);
     try {
       const {
         data: { user },
@@ -139,13 +147,32 @@ export default function MyDocumentsPage() {
 
       if (!user) return;
 
-      // Delete from DB table
-      await supabase.from("documents").delete().eq("id", docId).eq("user_id", user.id);
+      // Extract storage path from file_url if available
+      try {
+        const urlParts = doc.file_url.split("/documents/");
+        if (urlParts.length > 1) {
+          const filePath = decodeURIComponent(urlParts[1]);
+          await supabase.storage.from("documents").remove([filePath]);
+        }
+      } catch (e) {
+        // Continue DB deletion even if storage clean fails
+      }
 
-      // Refresh documents
-      setDocuments((prev) => prev.filter((d) => d.id !== docId));
+      // Delete from DB
+      const { error } = await supabase
+        .from("documents")
+        .delete()
+        .eq("id", doc.id)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+
+      setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+      toast.success("Document removed from vault.");
     } catch (err: any) {
-      alert(err.message || "Failed to delete document.");
+      toast.error(err?.message || "Failed to delete document.");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -153,8 +180,8 @@ export default function MyDocumentsPage() {
     setSyncingDigilocker(true);
     setTimeout(() => {
       setSyncingDigilocker(false);
-      alert("DigiLocker synced! Digital certificate signatures verified.");
-    }, 1000);
+      toast.success("DigiLocker synced! Digital certificate signatures verified.");
+    }, 1200);
   };
 
   return (
@@ -182,21 +209,52 @@ export default function MyDocumentsPage() {
             <span>{syncingDigilocker ? "Syncing..." : "Sync DigiLocker"}</span>
           </Button>
 
-          <label className="cursor-pointer">
-            <input
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
-              className="hidden"
-              onChange={handleFileUpload}
-              disabled={isUploading}
-            />
-            <div className="flex h-9 items-center justify-center rounded-xl bg-[#064e3b] px-4 text-xs font-semibold text-white hover:bg-[#053d2e] shadow-sm gap-1.5 dark:bg-emerald-600">
-              <UploadCloud className="h-4 w-4" />
-              <span>{isUploading ? "Uploading..." : "Upload Document"}</span>
-            </div>
-          </label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png"
+            className="hidden"
+            onChange={handleFileUpload}
+            disabled={isUploading}
+          />
+
+          <Button
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="bg-[#064e3b] hover:bg-[#053d2e] text-white text-xs gap-1.5 dark:bg-emerald-600"
+          >
+            {isUploading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Uploading...</span>
+              </>
+            ) : (
+              <>
+                <UploadCloud className="h-4 w-4" />
+                <span>Upload Document</span>
+              </>
+            )}
+          </Button>
         </div>
       </div>
+
+      {/* Error state */}
+      {fetchError && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-900 flex items-center justify-between dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+            <span>{fetchError}</span>
+          </div>
+          <button
+            onClick={fetchUserDocuments}
+            className="flex items-center gap-1 rounded-lg bg-rose-200 px-3 py-1 font-semibold text-rose-900 hover:bg-rose-300 dark:bg-rose-900 dark:text-rose-100"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -235,10 +293,10 @@ export default function MyDocumentsPage() {
             <AlertTriangle className="h-4 w-4 text-amber-600" />
           </div>
           <p className="mt-2 text-3xl font-extrabold text-amber-900 dark:text-amber-400">
-            {attentionCount} pending
+            {pendingCount + flaggedCount} pending
           </p>
           <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-            Awaiting nodal verification
+            Awaiting nodal officer scrutiny
           </p>
         </div>
       </div>
@@ -247,7 +305,10 @@ export default function MyDocumentsPage() {
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="rounded-3xl border border-stone-200 bg-white p-5 dark:border-[#193c30] dark:bg-[#0f231c] space-y-3">
+            <div
+              key={i}
+              className="rounded-3xl border border-stone-200 bg-white p-5 dark:border-[#193c30] dark:bg-[#0f231c] space-y-3"
+            >
               <Skeleton className="h-5 w-48" />
               <Skeleton className="h-4 w-32" />
               <Skeleton className="h-10 w-full rounded-xl" />
@@ -255,32 +316,31 @@ export default function MyDocumentsPage() {
           ))}
         </div>
       ) : documents.length === 0 ? (
+        /* Empty State */
         <div className="rounded-3xl border border-stone-200 bg-white p-12 text-center dark:border-[#193c30] dark:bg-[#0f231c]">
           <FileText className="h-12 w-12 text-stone-300 mx-auto mb-3" />
           <h3 className="text-base font-bold text-stone-800 dark:text-stone-200">
-            No Documents Uploaded Yet
+            No documents uploaded yet
           </h3>
           <p className="text-xs text-stone-500 mt-1 max-w-sm mx-auto">
-            Upload your Caste Certificate, Income Certificate, and Marksheet to Supabase Storage.
+            Upload your Caste Certificate, Income Certificate, and Marksheets to Supabase Storage for automatic application linking.
           </p>
-          <label className="mt-4 inline-block cursor-pointer">
-            <input
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
-              className="hidden"
-              onChange={handleFileUpload}
-            />
-            <div className="flex h-9 items-center justify-center rounded-xl bg-[#064e3b] px-4 text-xs font-semibold text-white hover:bg-[#053d2e] gap-1.5 dark:bg-emerald-600">
-              <UploadCloud className="h-4 w-4" />
-              <span>Upload Document Now</span>
-            </div>
-          </label>
+          <Button
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            className="mt-4 bg-[#064e3b] text-white text-xs gap-1.5 dark:bg-emerald-600"
+          >
+            <UploadCloud className="h-4 w-4" />
+            <span>Upload your first document</span>
+          </Button>
         </div>
       ) : (
+        /* Documents Grid */
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {documents.map((doc) => {
             const isFlagged = doc.status === "flagged";
             const isVerified = doc.status === "verified";
+            const isDeleting = deletingId === doc.id;
 
             return (
               <div
@@ -288,6 +348,8 @@ export default function MyDocumentsPage() {
                 className={`rounded-3xl border p-5 transition-all shadow-soft bg-white dark:bg-[#0f231c] ${
                   isFlagged
                     ? "border-amber-300 bg-amber-50/20 dark:border-amber-900/60"
+                    : isVerified
+                    ? "border-emerald-200/80 dark:border-emerald-900/50"
                     : "border-stone-200/90 dark:border-[#193c30]"
                 }`}
               >
@@ -297,7 +359,9 @@ export default function MyDocumentsPage() {
                       className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
                         isFlagged
                           ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                          : "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                          : isVerified
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                          : "bg-stone-100 text-stone-700 dark:bg-[#132820] dark:text-stone-300"
                       }`}
                     >
                       <FileText className="h-6 w-6" />
@@ -307,7 +371,7 @@ export default function MyDocumentsPage() {
                         {doc.name}
                       </h4>
                       <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
-                        Type: {doc.file_type || "PDF / Image"}
+                        Type: {doc.file_type || "Document"}
                       </p>
                     </div>
                   </div>
@@ -321,14 +385,34 @@ export default function MyDocumentsPage() {
                 </div>
 
                 <div className="mt-4 flex items-center justify-between text-[11px] text-stone-500 pt-3 border-t border-stone-100 dark:border-[#193c30] dark:text-stone-400">
-                  <span>Uploaded: {new Date(doc.uploaded_at).toLocaleDateString("en-IN")}</span>
-                  <button
-                    onClick={() => handleDeleteDocument(doc.id, doc.file_url)}
-                    className="flex items-center gap-1 text-rose-600 hover:text-rose-800 font-semibold"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    <span>Delete</span>
-                  </button>
+                  <span>
+                    Uploaded: {new Date(doc.uploaded_at).toLocaleDateString("en-IN")}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    {doc.file_url && (
+                      <a
+                        href={doc.file_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1 text-emerald-700 hover:text-emerald-900 font-semibold dark:text-emerald-400"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        <span>View</span>
+                      </a>
+                    )}
+                    <button
+                      disabled={isDeleting}
+                      onClick={() => handleDeleteDocument(doc)}
+                      className="flex items-center gap-1 text-rose-600 hover:text-rose-800 font-semibold disabled:opacity-50"
+                    >
+                      {isDeleting ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                      <span>Delete</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             );

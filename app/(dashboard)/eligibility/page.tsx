@@ -1,39 +1,66 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import Link from "next/link";
 import {
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
   Sparkles,
-  Award,
-  AlertCircle,
   GraduationCap,
-  IndianRupee,
   RefreshCw,
   FileCheck,
+  Check,
+  Clock,
+  Loader2,
+  IndianRupee,
 } from "lucide-react";
 import {
   eligibilitySchema,
   EligibilityFormData,
   defaultEligibilityValues,
 } from "@/lib/schemas/eligibility";
-import { SCHOLARSHIPS } from "@/lib/data/scholarships";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/components/shared/Toast";
+import {
+  applyToScholarship,
+  getUserAppliedScholarshipIds,
+} from "@/lib/services/applications";
+
+interface MatchedScheme {
+  id: string;
+  title: string;
+  amount_monthly: number;
+  amountFormatted: string;
+  deadline: string;
+  deadlineFormatted: string;
+  matchScore: number;
+  level: string;
+  description: string;
+}
 
 export default function EligibilityCheckerPage() {
   const [step, setStep] = useState<number>(1);
   const [isCalculated, setIsCalculated] = useState<boolean>(false);
-  const [matchedSchemes, setMatchedSchemes] = useState<typeof SCHOLARSHIPS>([]);
+  const [matchedSchemes, setMatchedSchemes] = useState<MatchedScheme[]>([]);
+  const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [appliedScholarshipIds, setAppliedScholarshipIds] = useState<string[]>([]);
+  const [applyingId, setApplyingId] = useState<string | null>(null);
+
+  const supabase = createClient();
+  const { toast } = useToast();
 
   const {
     register,
     handleSubmit,
     watch,
-    formState: { errors, isValid },
+    reset,
+    formState: { errors },
   } = useForm<EligibilityFormData>({
     resolver: zodResolver(eligibilitySchema),
     defaultValues: defaultEligibilityValues,
@@ -42,27 +69,160 @@ export default function EligibilityCheckerPage() {
 
   const formData = watch();
 
-  const onSubmit = (data: EligibilityFormData) => {
-    // Live calculation based on Zod-validated input
-    const matches = SCHOLARSHIPS.filter((s) => {
-      // Category match
-      const catMatch =
-        s.category === "All" || s.category === data.category;
-      // Income match
-      const incomeMatch =
-        !s.maxAnnualIncome || data.annualFamilyIncome <= s.maxAnnualIncome;
-      // Level match
-      const levelMatch =
-        s.educationLevel === data.currentEducationLevel;
-      // Percentage match
-      const marksMatch =
-        !s.minPercentageRequired || data.lastExamPercentage >= s.minPercentageRequired;
+  // Auto-fill from Supabase profile on mount
+  useEffect(() => {
+    async function loadUserProfile() {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
-      return catMatch && incomeMatch && levelMatch && marksMatch;
-    });
+        if (user) {
+          setCurrentUserId(user.id);
+          const appliedIds = await getUserAppliedScholarshipIds(supabase, user.id);
+          setAppliedScholarshipIds(appliedIds);
 
-    setMatchedSchemes(matches.length > 0 ? matches : SCHOLARSHIPS.slice(0, 2));
-    setIsCalculated(true);
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("full_name, category, state, institution")
+            .eq("id", user.id)
+            .single();
+
+          if (profile) {
+            reset({
+              ...defaultEligibilityValues,
+              fullName: profile.full_name || "Scholar Applicant",
+              category: (profile.category as any) || "ST",
+              stateOfDomicile: profile.state || "Jharkhand",
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Error loading user profile for eligibility:", err);
+      }
+    }
+
+    loadUserProfile();
+  }, [reset]);
+
+  const onSubmit = async (data: EligibilityFormData) => {
+    setIsEvaluating(true);
+    try {
+      // Query active scholarships from Supabase
+      const { data: schs, error } = await supabase
+        .from("scholarships")
+        .select("*")
+        .eq("status", "active")
+        .order("deadline", { ascending: true });
+
+      if (error) throw error;
+
+      if (schs && schs.length > 0) {
+        const results: MatchedScheme[] = [];
+
+        schs.forEach((item: any) => {
+          const eligibleArray: string[] = Array.isArray(item.category_eligible)
+            ? item.category_eligible
+            : typeof item.category_eligible === "string"
+            ? item.category_eligible.replace(/[{}]/g, "").split(",")
+            : ["ST", "SC", "OBC", "General"];
+
+          // Criteria match scoring
+          let score = 0;
+          const catMatches =
+            eligibleArray.includes(data.category) || eligibleArray.includes("All");
+          if (catMatches) score += 50;
+
+          // Level matching
+          const levelNorm = (item.level || "").toLowerCase();
+          const userLevelNorm = (data.currentEducationLevel || "").toLowerCase();
+          if (
+            levelNorm.includes("phd") && userLevelNorm.includes("ph.d") ||
+            levelNorm.includes("post-matric") && userLevelNorm.includes("post-matric") ||
+            levelNorm.includes("pre-matric") && userLevelNorm.includes("pre-matric") ||
+            levelNorm.includes("ug") && userLevelNorm.includes("undergraduate") ||
+            levelNorm.includes("pg") && userLevelNorm.includes("postgraduate")
+          ) {
+            score += 25;
+          } else {
+            score += 15; // partial level relevance
+          }
+
+          // Income match (up to 6 LPA)
+          if (data.annualFamilyIncome <= 600000) {
+            score += 15;
+          } else if (data.annualFamilyIncome <= 800000) {
+            score += 10;
+          }
+
+          // Marks match
+          if (data.lastExamPercentage >= 55) {
+            score += 10;
+          }
+
+          // If category matches, consider it an eligible match
+          if (catMatches) {
+            results.push({
+              id: item.id,
+              title: item.title,
+              amount_monthly: Number(item.amount_monthly) || 10000,
+              amountFormatted: `₹${Number(item.amount_monthly || 10000).toLocaleString("en-IN")} / month`,
+              deadline: item.deadline,
+              deadlineFormatted: `Closes ${new Date(item.deadline).toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}`,
+              matchScore: Math.min(score, 100),
+              level: item.level || "Post-Matric",
+              description: item.description,
+            });
+          }
+        });
+
+        // Sort by match percentage descending
+        results.sort((a, b) => b.matchScore - a.matchScore);
+        setMatchedSchemes(results);
+      }
+      setIsCalculated(true);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to calculate eligibility matches.");
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
+
+  const handleApply = async (scheme: MatchedScheme) => {
+    if (!currentUserId) {
+      toast.error("Please sign in to apply.");
+      return;
+    }
+
+    if (appliedScholarshipIds.includes(scheme.id)) {
+      toast.info("You have already applied for this scholarship.");
+      return;
+    }
+
+    setApplyingId(scheme.id);
+    try {
+      const result = await applyToScholarship(
+        supabase,
+        currentUserId,
+        scheme.id,
+        scheme.title
+      );
+
+      if (result.success) {
+        setAppliedScholarshipIds((prev) => [...prev, scheme.id]);
+        toast.success("Application submitted!");
+      } else {
+        toast.error(result.error || "Failed to submit application.");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to apply.");
+    } finally {
+      setApplyingId(null);
+    }
   };
 
   const steps = [
@@ -84,7 +244,7 @@ export default function EligibilityCheckerPage() {
           Eligibility & Entitlement Checker
         </h2>
         <p className="text-sm text-stone-500 max-w-lg mx-auto dark:text-stone-400">
-          Verify your eligibility against government norms in 4 simple steps and receive a customized scheme roadmap.
+          Verify your eligibility against official government norms and discover your matched affirmative action schemes.
         </p>
       </div>
 
@@ -147,56 +307,91 @@ export default function EligibilityCheckerPage() {
                 Assessment Complete: {matchedSchemes.length} Schemes Matched!
               </h3>
               <p className="text-xs sm:text-sm text-stone-600 max-w-md mx-auto dark:text-stone-300">
-                Congratulations, {formData.fullName}. You satisfy all core criteria for the schemes listed below.
+                Congratulations, {formData.fullName}. Based on your profile ({formData.category} Category, {formData.stateOfDomicile}), you satisfy eligibility norms for the schemes below.
               </p>
             </div>
 
-            {/* Matched Summary Pill */}
-            <div className="rounded-2xl bg-emerald-50 p-4 border border-emerald-200/80 dark:bg-emerald-950/40 dark:border-emerald-900/60 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold text-emerald-900 dark:text-emerald-300 uppercase tracking-wider">
-                  Estimated Total Aid Potential
-                </p>
-                <p className="text-2xl font-extrabold text-[#064e3b] dark:text-emerald-400">
-                  ₹37,000 / month + Contingency & Tuition
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <Badge variant="mint">Aadhaar Verified</Badge>
-                <Badge variant="saffron">{formData.category} Beneficiary</Badge>
-              </div>
-            </div>
-
             {/* List of matched schemes */}
-            <div className="space-y-3">
+            <div className="space-y-3 pt-2">
               <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
                 Your Matched Schemes
               </h4>
-              {matchedSchemes.map((s) => (
-                <div
-                  key={s.id}
-                  className="flex items-center justify-between rounded-2xl border border-stone-200/80 p-4 bg-stone-50/50 hover:bg-stone-50 dark:border-[#193c30] dark:bg-[#132820] dark:hover:bg-[#17382d]"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                      <GraduationCap className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h5 className="text-sm font-bold text-stone-900 dark:text-white">
-                        {s.title}
-                      </h5>
-                      <p className="text-xs text-stone-500 dark:text-stone-400">
-                        {s.ministry} • {s.amountFormatted}
-                      </p>
-                    </div>
-                  </div>
-                  <a href={`/scholarships`}>
-                    <Button size="sm" className="bg-[#064e3b] text-white text-xs dark:bg-emerald-600">
-                      Apply Scheme
-                    </Button>
-                  </a>
+              {matchedSchemes.length === 0 ? (
+                <div className="rounded-2xl border border-stone-200 p-8 text-center text-xs text-stone-500">
+                  No direct scheme matches found for this specific category and level combination.
                 </div>
-              ))}
+              ) : (
+                matchedSchemes.map((s) => {
+                  const isApplied = appliedScholarshipIds.includes(s.id);
+                  const isApplying = applyingId === s.id;
+
+                  return (
+                    <div
+                      key={s.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-stone-200/80 p-5 bg-stone-50/50 hover:bg-stone-50 dark:border-[#193c30] dark:bg-[#132820] dark:hover:bg-[#17382d] transition-all"
+                    >
+                      <div className="flex items-start gap-3.5">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 mt-0.5">
+                          <GraduationCap className="h-6 w-6" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                              <Sparkles className="h-3 w-3" />
+                              {s.matchScore}% Match
+                            </span>
+                            <Badge variant="subtle" size="sm">
+                              {s.level}
+                            </Badge>
+                          </div>
+                          <h5 className="text-sm font-bold text-stone-900 dark:text-white">
+                            {s.title}
+                          </h5>
+                          <div className="flex items-center gap-3 text-xs text-stone-500 dark:text-stone-400 mt-1 font-medium">
+                            <span className="text-[#064e3b] dark:text-emerald-400 font-bold">
+                              {s.amountFormatted}
+                            </span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {s.deadlineFormatted}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                        {isApplied ? (
+                          <Button
+                            size="sm"
+                            disabled
+                            className="bg-emerald-700 text-white text-xs dark:bg-emerald-600 opacity-90 cursor-not-allowed gap-1"
+                          >
+                            <Check className="h-3.5 w-3.5 stroke-[3]" />
+                            <span>Applied ✓</span>
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            disabled={isApplying}
+                            onClick={() => handleApply(s)}
+                            className="bg-[#064e3b] hover:bg-[#053d2e] text-white text-xs dark:bg-emerald-600 gap-1.5 shadow-sm"
+                          >
+                            {isApplying ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                <span>Applying...</span>
+                              </>
+                            ) : (
+                              <span>Apply Now</span>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
 
             <div className="flex justify-between items-center pt-4 border-t border-stone-100 dark:border-[#193c30]">
@@ -212,11 +407,11 @@ export default function EligibilityCheckerPage() {
                 <RefreshCw className="h-3.5 w-3.5" />
                 Retake Assessment
               </Button>
-              <a href="/dashboard">
+              <Link href="/dashboard">
                 <Button size="sm" className="bg-[#064e3b] text-white text-xs dark:bg-emerald-600">
                   Return to Dashboard
                 </Button>
-              </a>
+              </Link>
             </div>
           </div>
         ) : (
@@ -231,7 +426,7 @@ export default function EligibilityCheckerPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
-                    Full Student Name
+                    Full Student Name *
                   </label>
                   <input
                     {...register("fullName")}
@@ -245,7 +440,7 @@ export default function EligibilityCheckerPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
-                      Current Education Level
+                      Current Education Level *
                     </label>
                     <select
                       {...register("currentEducationLevel")}
@@ -261,7 +456,7 @@ export default function EligibilityCheckerPage() {
 
                   <div>
                     <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
-                      Course / Discipline Name
+                      Course / Discipline Name *
                     </label>
                     <input
                       {...register("courseName")}
@@ -276,7 +471,7 @@ export default function EligibilityCheckerPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
-                    Last Qualifying Examination Percentage (%)
+                    Last Qualifying Examination Percentage (%) *
                   </label>
                   <input
                     type="number"
@@ -303,7 +498,7 @@ export default function EligibilityCheckerPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
-                      Affirmative Action Community Category
+                      Affirmative Action Community Category *
                     </label>
                     <select
                       {...register("category")}
@@ -319,7 +514,7 @@ export default function EligibilityCheckerPage() {
 
                   <div>
                     <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
-                      State of Permanent Domicile
+                      State of Permanent Domicile *
                     </label>
                     <input
                       {...register("stateOfDomicile")}
@@ -359,7 +554,7 @@ export default function EligibilityCheckerPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1.5">
-                    Annual Gross Family Income (in INR ₹)
+                    Annual Gross Family Income (in INR ₹) *
                   </label>
                   <input
                     type="number"
@@ -487,10 +682,20 @@ export default function EligibilityCheckerPage() {
                 <Button
                   type="submit"
                   size="sm"
-                  className="bg-[#064e3b] text-white gap-1 text-xs dark:bg-emerald-600"
+                  disabled={isEvaluating}
+                  className="bg-[#064e3b] text-white gap-1.5 text-xs dark:bg-emerald-600 shadow-md"
                 >
-                  Calculate Schemes
-                  <Sparkles className="h-3.5 w-3.5" />
+                  {isEvaluating ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Matching Schemes...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Calculate Schemes</span>
+                      <Sparkles className="h-3.5 w-3.5" />
+                    </>
+                  )}
                 </Button>
               )}
             </div>

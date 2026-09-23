@@ -13,11 +13,14 @@ import {
   ShieldCheck,
   Check,
   Info,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/shared/Toast";
 
 export interface DBNotification {
   id: string;
@@ -32,30 +35,35 @@ export interface DBNotification {
 export default function NotificationsPage() {
   const [items, setItems] = useState<DBNotification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("all");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const supabase = createClient();
+  const { toast } = useToast();
 
   const fetchNotifications = async () => {
     setLoading(true);
+    setFetchError(null);
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
       if (user) {
+        setCurrentUserId(user.id);
         const { data, error } = await supabase
           .from("notifications")
           .select("*")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false });
 
-        if (!error && data) {
-          setItems(data);
-        }
+        if (error) throw error;
+        if (data) setItems(data);
       }
-    } catch (err) {
-      // Fallback handled
+    } catch (err: any) {
+      console.error("Error fetching notifications:", err);
+      setFetchError(err?.message || "Failed to load notifications.");
     } finally {
       setLoading(false);
     }
@@ -66,22 +74,23 @@ export default function NotificationsPage() {
   }, []);
 
   const markAllRead = async () => {
+    if (!currentUserId) return;
+
     // Optimistic UI Update
     setItems((prev) => prev.map((item) => ({ ...item, is_read: true })));
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("user_id", currentUserId);
 
-      if (user) {
-        await supabase
-          .from("notifications")
-          .update({ is_read: true })
-          .eq("user_id", user.id);
-      }
-    } catch (err) {
-      // Ignore
+      if (error) throw error;
+      toast.success("All notifications marked as read");
+      // Trigger storage event or refresh for sidebar badge
+      window.dispatchEvent(new Event("notificationsUpdated"));
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update notifications.");
     }
   };
 
@@ -93,8 +102,9 @@ export default function NotificationsPage() {
 
     try {
       await supabase.from("notifications").update({ is_read: true }).eq("id", id);
+      window.dispatchEvent(new Event("notificationsUpdated"));
     } catch (err) {
-      // Ignore
+      console.error("Failed to mark single notification as read:", err);
     }
   };
 
@@ -117,16 +127,35 @@ export default function NotificationsPage() {
           </p>
         </div>
 
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={markAllRead}
-          className="text-xs gap-1.5"
-        >
-          <CheckCheck className="h-3.5 w-3.5" />
-          <span>Mark all as read</span>
-        </Button>
+        {items.some((i) => !i.is_read) && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={markAllRead}
+            className="text-xs gap-1.5"
+          >
+            <CheckCheck className="h-3.5 w-3.5" />
+            <span>Mark all as read</span>
+          </Button>
+        )}
       </div>
+
+      {/* Error state */}
+      {fetchError && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-900 flex items-center justify-between dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+            <span>{fetchError}</span>
+          </div>
+          <button
+            onClick={fetchNotifications}
+            className="flex items-center gap-1 rounded-lg bg-rose-200 px-3 py-1 font-semibold text-rose-900 hover:bg-rose-300 dark:bg-rose-900 dark:text-rose-100"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Filter Tabs */}
       <div className="flex flex-wrap gap-2">
@@ -151,11 +180,14 @@ export default function NotificationsPage() {
         ))}
       </div>
 
-      {/* Skeletons while loading */}
+      {/* Loading Skeletons */}
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="rounded-3xl border border-stone-200 bg-white p-5 dark:border-[#193c30] dark:bg-[#0f231c] space-y-2">
+            <div
+              key={i}
+              className="rounded-3xl border border-stone-200 bg-white p-5 dark:border-[#193c30] dark:bg-[#0f231c] space-y-2"
+            >
               <Skeleton className="h-5 w-48" />
               <Skeleton className="h-4 w-3/4" />
             </div>
@@ -163,12 +195,20 @@ export default function NotificationsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredItems.length === 0 ? (
+          {items.length === 0 ? (
+            /* Empty State */
             <div className="rounded-3xl border border-stone-200 bg-white p-12 text-center dark:border-[#193c30] dark:bg-[#0f231c]">
               <Bell className="h-10 w-10 text-stone-300 mx-auto mb-2" />
-              <p className="text-sm font-bold text-stone-700 dark:text-stone-200">
-                No notifications in this category
+              <h3 className="text-base font-bold text-stone-800 dark:text-stone-200">
+                No notifications yet
+              </h3>
+              <p className="text-xs text-stone-500 mt-1 max-w-sm mx-auto">
+                When you submit scholarship applications or receive updates from nodal officers, your notifications will appear here.
               </p>
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="rounded-3xl border border-stone-200 bg-white p-8 text-center text-xs text-stone-500 dark:border-[#193c30] dark:bg-[#0f231c]">
+              No notifications in this filter category.
             </div>
           ) : (
             filteredItems.map((item) => {
@@ -177,7 +217,8 @@ export default function NotificationsPage() {
               return (
                 <div
                   key={item.id}
-                  className={`flex flex-col sm:flex-row items-start justify-between gap-4 rounded-3xl border p-5 transition-all bg-white shadow-soft dark:bg-[#0f231c] ${
+                  onClick={() => isUnread && markSingleRead(item.id)}
+                  className={`flex flex-col sm:flex-row items-start justify-between gap-4 rounded-3xl border p-5 transition-all bg-white shadow-soft cursor-pointer dark:bg-[#0f231c] ${
                     isUnread
                       ? "border-emerald-300/80 bg-emerald-50/20 dark:border-emerald-900/60 dark:bg-emerald-950/20"
                       : "border-stone-200/90 dark:border-[#193c30]"
@@ -188,7 +229,11 @@ export default function NotificationsPage() {
                       className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
                         item.type === "deadline"
                           ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                          : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                          : item.type === "disbursement"
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                          : item.type === "verification"
+                          ? "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300"
+                          : "bg-stone-100 text-stone-700 dark:bg-[#132820] dark:text-stone-300"
                       }`}
                     >
                       {item.type === "deadline" ? (
@@ -228,7 +273,14 @@ export default function NotificationsPage() {
                   <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                     {item.action_url && (
                       <Link href={item.action_url}>
-                        <Button size="sm" className="bg-[#064e3b] text-white text-xs dark:bg-emerald-600">
+                        <Button
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isUnread) markSingleRead(item.id);
+                          }}
+                          className="bg-[#064e3b] text-white text-xs dark:bg-emerald-600"
+                        >
                           <span>View Details</span>
                           <ArrowRight className="h-3 w-3 ml-1" />
                         </Button>
@@ -236,7 +288,10 @@ export default function NotificationsPage() {
                     )}
                     {isUnread && (
                       <button
-                        onClick={() => markSingleRead(item.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          markSingleRead(item.id);
+                        }}
                         className="p-1.5 text-stone-400 hover:text-stone-700 dark:hover:text-white text-xs font-semibold flex items-center gap-1"
                         title="Mark as read"
                       >
