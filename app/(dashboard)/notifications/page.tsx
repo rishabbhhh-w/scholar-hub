@@ -16,97 +16,20 @@ import {
   RefreshCw,
   AlertCircle,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { useNotifications, DBNotification } from "@/lib/context/NotificationContext";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/components/shared/Toast";
-
-export interface DBNotification {
-  id: string;
-  title: string;
-  message: string;
-  type: "deadline" | "verification" | "disbursement" | "info";
-  is_read: boolean;
-  action_url?: string;
-  created_at: string;
-}
 
 export default function NotificationsPage() {
-  const [items, setItems] = useState<DBNotification[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("all");
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-
-  const supabase = createClient();
-  const { toast } = useToast();
-
-  const fetchNotifications = async () => {
-    setLoading(true);
-    setFetchError(null);
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (user) {
-        setCurrentUserId(user.id);
-        const { data, error } = await supabase
-          .from("notifications")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false });
-
-        if (error) throw error;
-        if (data) setItems(data);
-      }
-    } catch (err: any) {
-      console.error("Error fetching notifications:", err);
-      setFetchError(err?.message || "Failed to load notifications.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchNotifications();
-  }, []);
-
-  const markAllRead = async () => {
-    if (!currentUserId) return;
-
-    // Optimistic UI Update
-    setItems((prev) => prev.map((item) => ({ ...item, is_read: true })));
-
-    try {
-      const { error } = await supabase
-        .from("notifications")
-        .update({ is_read: true })
-        .eq("user_id", currentUserId);
-
-      if (error) throw error;
-      toast.success("All notifications marked as read");
-      // Trigger storage event or refresh for sidebar badge
-      window.dispatchEvent(new Event("notificationsUpdated"));
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to update notifications.");
-    }
-  };
-
-  const markSingleRead = async (id: string) => {
-    // Optimistic UI Update
-    setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, is_read: true } : item))
-    );
-
-    try {
-      await supabase.from("notifications").update({ is_read: true }).eq("id", id);
-      window.dispatchEvent(new Event("notificationsUpdated"));
-    } catch (err) {
-      console.error("Failed to mark single notification as read:", err);
-    }
-  };
+  const {
+    notifications: items,
+    loading,
+    error: fetchError,
+    fetchNotifications,
+    markAsRead: markSingleRead,
+    markAllAsRead: markAllRead,
+  } = useNotifications();
 
   const filteredItems = items.filter((item) => {
     if (activeTab === "all") return true;

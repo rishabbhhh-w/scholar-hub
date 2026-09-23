@@ -10,9 +10,10 @@ import {
   Sun,
   Moon,
   CheckCircle2,
+  CheckCheck,
 } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
-import { NOTIFICATIONS } from "@/lib/data/notifications";
+import { useNotifications } from "@/lib/context/NotificationContext";
 import { useUserProfile } from "@/lib/hooks/useUserProfile";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -32,7 +33,7 @@ export function Header({
   const [notifOpen, setNotifOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const profile = useUserProfile();
-  const unreadCount = NOTIFICATIONS.filter((n) => !n.isRead).length;
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +41,14 @@ export function Header({
       router.push(`/scholarships?q=${encodeURIComponent(searchQuery.trim())}`);
     } else {
       router.push("/scholarships");
+    }
+  };
+
+  const handleNotificationClick = async (id: string, actionUrl?: string) => {
+    await markAsRead(id);
+    setNotifOpen(false);
+    if (actionUrl) {
+      router.push(actionUrl);
     }
   };
 
@@ -126,9 +135,21 @@ export function Header({
           {notifOpen && (
             <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl border border-stone-200 bg-white p-4 shadow-2xl z-50 dark:border-[#193c30] dark:bg-[#0c1c16]">
               <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-[#193c30]">
-                <h4 className="text-sm font-bold text-stone-900 dark:text-white">
-                  Notifications ({unreadCount} new)
-                </h4>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-bold text-stone-900 dark:text-white">
+                    Notifications ({unreadCount} new)
+                  </h4>
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={() => markAllAsRead()}
+                      className="text-[11px] text-stone-500 hover:text-emerald-700 flex items-center gap-0.5 dark:text-stone-400 dark:hover:text-emerald-400"
+                      title="Mark all as read"
+                    >
+                      <CheckCheck className="h-3 w-3" />
+                      Read all
+                    </button>
+                  )}
+                </div>
                 <Link
                   href="/notifications"
                   onClick={() => setNotifOpen(false)}
@@ -137,20 +158,43 @@ export function Header({
                   View all
                 </Link>
               </div>
+
               <div className="divide-y divide-stone-100 max-h-72 overflow-y-auto dark:divide-[#193c30]">
-                {NOTIFICATIONS.slice(0, 3).map((n) => (
-                  <div key={n.id} className="py-3">
-                    <p className="text-xs font-semibold text-stone-900 dark:text-stone-100">
-                      {n.title}
-                    </p>
-                    <p className="mt-0.5 text-[11px] text-stone-500 line-clamp-2 dark:text-stone-400">
-                      {n.description}
-                    </p>
-                    <span className="mt-1 block text-[10px] text-stone-400">
-                      {n.timeAgo}
-                    </span>
+                {notifications.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-stone-500 dark:text-stone-400">
+                    No notifications yet
                   </div>
-                ))}
+                ) : (
+                  notifications.slice(0, 5).map((n) => (
+                    <div
+                      key={n.id}
+                      onClick={() => handleNotificationClick(n.id, n.action_url)}
+                      className={`py-3 px-1 cursor-pointer rounded-lg hover:bg-stone-50 transition-colors dark:hover:bg-[#132820] ${
+                        !n.is_read ? "font-semibold" : ""
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-xs font-bold text-stone-900 dark:text-stone-100">
+                          {n.title}
+                        </p>
+                        {!n.is_read && (
+                          <span className="h-2 w-2 rounded-full bg-emerald-600 shrink-0 mt-1" />
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-[11px] text-stone-500 line-clamp-2 dark:text-stone-400 font-normal">
+                        {n.message}
+                      </p>
+                      <span className="mt-1 block text-[10px] text-stone-400 font-normal">
+                        {new Date(n.created_at).toLocaleDateString("en-IN", {
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
