@@ -129,30 +129,69 @@ function ScholarshipsContent() {
             ? item.category_eligible
             : typeof item.category_eligible === "string"
             ? item.category_eligible.replace(/[{}]/g, "").split(",")
-            : ["ST", "SC", "OBC", "General"];
+            : item.category ? [item.category] : [];
+
+          const titleVal = item.name || item.title || "Scholarship Scheme";
+          const ministryVal = item.ministry || "Ministry of Tribal Affairs & Government of India";
+          const categoryVal = item.category || (eligibleArray.length > 0 ? eligibleArray[0] : "All Categories");
+          const levelVal = item.education_level || item.educationLevel || item.level || "All Levels";
+          const deadlineVal = item.closing_date || item.deadline || "";
+
+          const rawAmount = item.amount ?? item.amount_monthly ?? 0;
+          let amountFormattedVal = "";
+          let amountVal: number | string = 0;
+
+          if (typeof rawAmount === "string") {
+            if (rawAmount.includes("₹")) {
+              amountFormattedVal = rawAmount;
+              amountVal = rawAmount;
+            } else {
+              const parsed = Number(rawAmount);
+              if (!isNaN(parsed) && parsed > 0) {
+                amountVal = parsed;
+                amountFormattedVal = `₹${parsed.toLocaleString("en-IN")} / month`;
+              } else {
+                amountVal = rawAmount;
+                amountFormattedVal = rawAmount || "₹0 / month";
+              }
+            }
+          } else if (typeof rawAmount === "number" && !isNaN(rawAmount)) {
+            amountVal = rawAmount;
+            amountFormattedVal = `₹${rawAmount.toLocaleString("en-IN")} / month`;
+          } else {
+            amountVal = 0;
+            amountFormattedVal = "₹0 / month";
+          }
+
+          const statusVal = typeof item.is_active === "boolean"
+            ? (item.is_active ? "active" : "inactive")
+            : (item.status || "active");
 
           return {
             id: item.id,
             slug: item.id,
-            title: item.title,
-            ministry: item.ministry || "Ministry of Tribal Affairs & Government of India",
-            category: (eligibleArray[0] as any) || "ST",
-            educationLevel:
-              item.level === "PhD"
-                ? "Ph.D. / Fellowship"
-                : (item.level as any) || "Post-Matric",
+            title: titleVal,
+            name: titleVal,
+            ministry: ministryVal,
+            category: categoryVal as any,
+            educationLevel: levelVal as any,
+            education_level: levelVal,
+            level: levelVal,
             matchScore: 95,
-            deadline: item.deadline,
-            closingDateFormatted: `Closes ${new Date(item.deadline).toLocaleDateString("en-IN", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}`,
-            amount: Number(item.amount_monthly || item.amount) || 10000,
-            amountFormatted: `₹${Number(item.amount_monthly || item.amount || 10000).toLocaleString("en-IN")} / month`,
+            deadline: deadlineVal,
+            closing_date: deadlineVal,
+            closingDateFormatted: deadlineVal
+              ? `Closes ${new Date(deadlineVal).toLocaleDateString("en-IN", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}`
+              : "Ongoing",
+            amount: amountVal as any,
+            amountFormatted: amountFormattedVal,
             amountPeriod: "month",
             description: item.description || "Government scholarship scheme.",
-            eligibilityCriteria: eligibleArray.map((c) => `${c} candidates eligible`),
+            eligibilityCriteria: eligibleArray.length > 0 ? eligibleArray.map((c) => `${c} candidates eligible`) : ["Eligible candidates"],
             requiredDocuments: [
               "Aadhaar Card",
               "Caste Certificate",
@@ -162,9 +201,10 @@ function ScholarshipsContent() {
             benefits: ["Monthly DBT Fellowship", "Contingency Research Grant"],
             selectionProcess: "Direct Verification by State Nodal Officer",
             sponsoringBody: "Central Ministry",
-            tags: eligibleArray,
+            tags: eligibleArray.length > 0 ? eligibleArray : [categoryVal],
             genderEligibility: "All",
-            status: item.status || "active",
+            status: statusVal as any,
+            is_active: statusVal === "active",
           };
         });
       }
@@ -666,7 +706,7 @@ function ScholarshipsContent() {
                         {/* Scheme & Department */}
                         <td className="py-4 px-3 max-w-xs sm:max-w-md">
                           <span className="font-bold text-sm text-stone-900 dark:text-white block line-clamp-1">
-                            {s.title}
+                            {(s as any).name || s.title}
                           </span>
                           <span className="text-[11px] text-stone-500 dark:text-stone-400 block mt-0.5 truncate">
                             {s.ministry || "Ministry of Tribal Affairs & Government of India"}
@@ -677,23 +717,25 @@ function ScholarshipsContent() {
                         <td className="py-4 px-3">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <Badge variant="mint" size="sm">
-                              {s.category || "ST"}
+                              {(s as any).category || (s as any).category_eligible || "All Categories"}
                             </Badge>
                             <Badge variant="subtle" size="sm">
-                              {s.educationLevel || "Post-Matric"}
+                              {(s as any).education_level || (s as any).educationLevel || (s as any).level || "All Levels"}
                             </Badge>
                           </div>
                         </td>
 
                         {/* Disbursed Amount */}
                         <td className="py-4 px-3 font-bold text-emerald-800 dark:text-emerald-400 whitespace-nowrap">
-                          {s.amountFormatted || `₹${s.amount.toLocaleString("en-IN")} / month`}
+                          {typeof (s as any).amount === 'string' && (s as any).amount.includes('₹')
+                            ? (s as any).amount
+                            : (s.amountFormatted || (typeof s.amount === 'number' && !isNaN(s.amount) ? `₹${s.amount.toLocaleString("en-IN")} / month` : `₹${s.amount || '0'} / month`))}
                         </td>
 
                         {/* Deadline */}
                         <td className="py-4 px-3 text-stone-600 dark:text-stone-300 whitespace-nowrap">
-                          {s.deadline
-                            ? `Closes ${new Date(s.deadline).toLocaleDateString("en-IN", {
+                          {((s as any).closing_date || s.deadline)
+                            ? `Closes ${new Date((s as any).closing_date || s.deadline).toLocaleDateString("en-IN", {
                                 day: "numeric",
                                 month: "short",
                                 year: "numeric",
