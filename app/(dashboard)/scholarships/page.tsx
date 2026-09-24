@@ -43,6 +43,22 @@ import {
 } from "@/lib/services/applications";
 import { useUserProfile } from "@/lib/hooks/useUserProfile";
 
+const UI_TO_DB_LEVEL: Record<string, string> = {
+  "Pre-Matric": "Pre-Matric",
+  "Post-Matric": "Post-Matric",
+  "Undergraduate": "UG",
+  "Postgraduate": "PG",
+  "Ph.D. / Fellowship": "PhD",
+};
+
+const DB_TO_UI_LEVEL: Record<string, string> = {
+  "Pre-Matric": "Pre-Matric",
+  "Post-Matric": "Post-Matric",
+  "UG": "Undergraduate",
+  "PG": "Postgraduate",
+  "PhD": "Ph.D. / Fellowship",
+};
+
 function ScholarshipsContent() {
   const profile = useUserProfile();
   const isOfficerOrAdmin = profile.role === "admin" || profile.role === "nodal_officer";
@@ -77,7 +93,7 @@ function ScholarshipsContent() {
   const [formCategory, setFormCategory] = useState<string>("ST");
   const [formLevel, setFormLevel] = useState<string>("Post-Matric");
   const [formDeadline, setFormDeadline] = useState("2026-11-30");
-  const [formStatus, setFormStatus] = useState<"active" | "inactive">("active");
+  const [formStatus, setFormStatus] = useState<"active" | "closed">("active");
   const [isSavingScheme, setIsSavingScheme] = useState(false);
 
   const supabase = createClient();
@@ -134,38 +150,17 @@ function ScholarshipsContent() {
           const titleVal = item.name || item.title || "Scholarship Scheme";
           const ministryVal = item.ministry || "Ministry of Tribal Affairs & Government of India";
           const categoryVal = item.category || (eligibleArray.length > 0 ? eligibleArray[0] : "All Categories");
-          const levelVal = item.education_level || item.educationLevel || item.level || "All Levels";
+          
+          const rawLevel = item.education_level || item.level || "";
+          const levelVal = DB_TO_UI_LEVEL[rawLevel] || rawLevel || "Post-Matric";
           const deadlineVal = item.closing_date || item.deadline || "";
 
-          const rawAmount = item.amount ?? item.amount_monthly ?? 0;
-          let amountFormattedVal = "";
-          let amountVal: number | string = 0;
+          const rawAmount = item.amount_monthly ?? item.amount ?? 0;
+          const parsedAmount = typeof rawAmount === "number" ? rawAmount : parseInt(String(rawAmount).replace(/[^0-9]/g, ""), 10);
+          const amountVal = !isNaN(parsedAmount) && parsedAmount > 0 ? parsedAmount : 10000;
+          const amountFormattedVal = typeof rawAmount === "string" && rawAmount.includes("₹") ? rawAmount : `₹${amountVal.toLocaleString("en-IN")} / month`;
 
-          if (typeof rawAmount === "string") {
-            if (rawAmount.includes("₹")) {
-              amountFormattedVal = rawAmount;
-              amountVal = rawAmount;
-            } else {
-              const parsed = Number(rawAmount);
-              if (!isNaN(parsed) && parsed > 0) {
-                amountVal = parsed;
-                amountFormattedVal = `₹${parsed.toLocaleString("en-IN")} / month`;
-              } else {
-                amountVal = rawAmount;
-                amountFormattedVal = rawAmount || "₹0 / month";
-              }
-            }
-          } else if (typeof rawAmount === "number" && !isNaN(rawAmount)) {
-            amountVal = rawAmount;
-            amountFormattedVal = `₹${rawAmount.toLocaleString("en-IN")} / month`;
-          } else {
-            amountVal = 0;
-            amountFormattedVal = "₹0 / month";
-          }
-
-          const statusVal = typeof item.is_active === "boolean"
-            ? (item.is_active ? "active" : "inactive")
-            : (item.status || "active");
+          const statusVal = item.status === "active" || item.is_active === true ? "active" : "closed";
 
           return {
             id: item.id,
@@ -175,8 +170,8 @@ function ScholarshipsContent() {
             ministry: ministryVal,
             category: categoryVal as any,
             educationLevel: levelVal as any,
-            education_level: levelVal,
-            level: levelVal,
+            education_level: item.education_level || UI_TO_DB_LEVEL[levelVal] || levelVal,
+            level: item.level || UI_TO_DB_LEVEL[levelVal] || levelVal,
             matchScore: 95,
             deadline: deadlineVal,
             closing_date: deadlineVal,
@@ -187,7 +182,7 @@ function ScholarshipsContent() {
                   year: "numeric",
                 })}`
               : "Ongoing",
-            amount: amountVal as any,
+            amount: amountVal,
             amountFormatted: amountFormattedVal,
             amountPeriod: "month",
             description: item.description || "Government scholarship scheme.",
@@ -283,11 +278,23 @@ function ScholarshipsContent() {
     setFormTitle(scholarship.title);
     setFormMinistry(scholarship.ministry || "Ministry of Tribal Affairs");
     setFormDescription(scholarship.description || "");
-    setFormAmount(scholarship.amount || 10000);
+
+    const parsedAmt = typeof scholarship.amount === "number"
+      ? scholarship.amount
+      : parseInt(String(scholarship.amount || "").replace(/[^0-9]/g, ""), 10);
+    setFormAmount(!isNaN(parsedAmt) && parsedAmt > 0 ? parsedAmt : 10000);
+
     setFormCategory(scholarship.category || "ST");
-    setFormLevel(scholarship.educationLevel || "Post-Matric");
+
+    const rawLvl = (scholarship as any).education_level || (scholarship as any).level || scholarship.educationLevel;
+    const uiLevel = DB_TO_UI_LEVEL[rawLvl] || rawLvl || "Post-Matric";
+    setFormLevel(uiLevel);
+
     setFormDeadline(scholarship.deadline || "2026-11-30");
-    setFormStatus((scholarship as any).status === "inactive" ? "inactive" : "active");
+
+    const currStatus = (scholarship as any).status || ((scholarship as any).is_active ? "active" : "closed");
+    setFormStatus(currStatus === "active" ? "active" : "closed");
+
     setIsSchemeModalOpen(true);
   };
 
@@ -302,12 +309,13 @@ function ScholarshipsContent() {
     setIsSavingScheme(true);
 
     try {
+      const dbLevel = UI_TO_DB_LEVEL[formLevel] || formLevel;
       const payload = {
         title: formTitle.trim(),
         description: formDescription.trim(),
         amount_monthly: Number(formAmount),
         category_eligible: [formCategory],
-        level: formLevel,
+        education_level: dbLevel,
         deadline: formDeadline,
         status: formStatus,
       };
@@ -320,72 +328,20 @@ function ScholarshipsContent() {
           .eq("id", editingScheme.id);
 
         if (error) {
-          console.warn("Update warning (updating local state):", error.message);
+          throw new Error(error.message);
         }
-
-        setScholarshipList((prev) =>
-          prev.map((s) =>
-            s.id === editingScheme.id
-              ? {
-                  ...s,
-                  title: formTitle.trim(),
-                  ministry: formMinistry.trim(),
-                  description: formDescription.trim(),
-                  amount: Number(formAmount),
-                  amountFormatted: `₹${Number(formAmount).toLocaleString("en-IN")} / month`,
-                  category: formCategory as any,
-                  educationLevel: formLevel as any,
-                  deadline: formDeadline,
-                  closingDateFormatted: `Closes ${new Date(formDeadline).toLocaleDateString("en-IN", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}`,
-                  status: formStatus,
-                }
-              : s
-          )
-        );
 
         toast.success("Scholarship scheme updated successfully!");
       } else {
         // Insert new scheme
-        const { data: inserted, error } = await supabase
+        const { error } = await supabase
           .from("scholarships")
-          .insert(payload)
-          .select("*")
-          .single();
+          .insert(payload);
 
-        const newId = inserted?.id || `scheme-${Date.now()}`;
-        const newScheme: Scholarship = {
-          id: newId,
-          slug: newId,
-          title: formTitle.trim(),
-          ministry: formMinistry.trim(),
-          category: formCategory as any,
-          educationLevel: formLevel as any,
-          matchScore: 95,
-          deadline: formDeadline,
-          closingDateFormatted: `Closes ${new Date(formDeadline).toLocaleDateString("en-IN", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-          })}`,
-          amount: Number(formAmount),
-          amountFormatted: `₹${Number(formAmount).toLocaleString("en-IN")} / month`,
-          amountPeriod: "month",
-          description: formDescription.trim(),
-          eligibilityCriteria: [`${formCategory} candidates eligible`],
-          requiredDocuments: ["Aadhaar Card", "Caste Certificate", "Income Certificate"],
-          benefits: ["Monthly Fellowship"],
-          selectionProcess: "Nodal Verification",
-          sponsoringBody: "Central Ministry",
-          tags: [formCategory],
-          genderEligibility: "All",
-          status: formStatus,
-        };
+        if (error) {
+          throw new Error(error.message);
+        }
 
-        setScholarshipList((prev) => [newScheme, ...prev]);
         toast.success("New scholarship scheme created successfully!");
       }
 
@@ -398,13 +354,14 @@ function ScholarshipsContent() {
     }
   };
 
-  // Toggle Active / Inactive Status
+  // Toggle Active / Closed Status
   const handleToggleStatus = async (scholarship: Scholarship) => {
-    const newStatus = (scholarship as any).status === "active" ? "inactive" : "active";
+    const currentStatus = (scholarship as any).status === "active" ? "active" : "closed";
+    const newStatus = currentStatus === "active" ? "closed" : "active";
 
     // Optimistic UI update
     setScholarshipList((prev) =>
-      prev.map((s) => (s.id === scholarship.id ? { ...s, status: newStatus } : s))
+      prev.map((s) => (s.id === scholarship.id ? { ...s, status: newStatus as any } : s))
     );
 
     try {
@@ -413,10 +370,14 @@ function ScholarshipsContent() {
         .update({ status: newStatus })
         .eq("id", scholarship.id);
 
-      if (error) console.warn("Supabase update status warning:", error.message);
+      if (error) {
+        throw new Error(error.message);
+      }
       toast.success(`Scheme "${scholarship.title}" set to ${newStatus.toUpperCase()}`);
+      await fetchScholarshipsAndApplications();
     } catch (err: any) {
-      toast.error("Failed to update scheme status.");
+      toast.error(err?.message || "Failed to update scheme status.");
+      await fetchScholarshipsAndApplications();
     }
   };
 
@@ -428,18 +389,21 @@ function ScholarshipsContent() {
 
     try {
       const { error } = await supabase.from("scholarships").delete().eq("id", id);
-      if (error) console.warn("Supabase delete error:", error.message);
+      if (error) {
+        throw new Error(error.message);
+      }
       toast.success(`Scheme "${title}" removed.`);
-    } catch (err) {
-      toast.error("Failed to delete scheme.");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete scheme.");
+      await fetchScholarshipsAndApplications();
     }
   };
 
   const filteredScholarships = useMemo(() => {
     return scholarshipList
       .filter((s) => {
-        // If student, filter out inactive schemes
-        if (!isOfficerOrAdmin && (s as any).status === "inactive") return false;
+        // If student, filter out closed schemes
+        if (!isOfficerOrAdmin && (s as any).status === "closed") return false;
 
         const q = searchQuery.trim().toLowerCase();
         const matchesSearch =
@@ -626,7 +590,7 @@ function ScholarshipsContent() {
             {[
               { key: "All", label: "All Schemes" },
               { key: "active", label: "Active Only" },
-              { key: "inactive", label: "Inactive Only" },
+              { key: "closed", label: "Closed Only" },
             ].map((st) => (
               <button
                 key={st.key}
@@ -696,7 +660,7 @@ function ScholarshipsContent() {
                 </thead>
                 <tbody className="divide-y divide-stone-100 dark:divide-[#193c30]">
                   {filteredScholarships.map((s) => {
-                    const isActive = (s as any).status !== "inactive";
+                    const isActive = (s as any).status === "active";
 
                     return (
                       <tr
@@ -756,7 +720,7 @@ function ScholarshipsContent() {
                               size="sm"
                               className="group-hover:opacity-80 transition-opacity"
                             >
-                              {isActive ? "Active" : "Inactive"}
+                              {isActive ? "Active" : "Closed"}
                             </Badge>
                           </button>
                         </td>
@@ -994,7 +958,7 @@ function ScholarshipsContent() {
               className="h-11 w-full rounded-xl border border-stone-200 bg-white px-3.5 text-xs sm:text-sm text-stone-900 focus:border-[#064e3b] focus:outline-none dark:border-[#193c30] dark:bg-[#0f231c] dark:text-white"
             >
               <option value="active">Active (Visible to Students)</option>
-              <option value="inactive">Inactive (Archived / Closed)</option>
+              <option value="closed">Closed / Archived</option>
             </select>
           </div>
 
