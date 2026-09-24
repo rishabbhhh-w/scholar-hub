@@ -123,7 +123,7 @@ export default function AdminDashboardPage() {
           ),
           scholarships (
             title,
-            amount_monthly
+            amount
           )
         `)
         .order("submitted_at", { ascending: false });
@@ -131,7 +131,7 @@ export default function AdminDashboardPage() {
       if (error) {
         const { data: fallbackApps, error: fallbackError } = await supabase
           .from("applications")
-          .select("id, tracking_number, status, submitted_at, notes, user_id, scholarship_id, profiles(full_name, category, state, institution), scholarships(title, amount_monthly)")
+          .select("id, tracking_number, status, submitted_at, notes, user_id, scholarship_id, profiles(full_name, category, state, institution), scholarships(title, amount)")
           .order("submitted_at", { ascending: false });
 
         if (!fallbackError && fallbackApps) {
@@ -154,7 +154,7 @@ export default function AdminDashboardPage() {
             state: prof?.state || "Jharkhand",
             institution: prof?.institution || "Central University of Jharkhand",
             schemeTitle: sch?.title || "National Tribal Fellowship Scheme",
-            grantAmount: sch?.amount_monthly ? `₹${(sch.amount_monthly * 12).toLocaleString()} / yr` : "₹1,20,000 / yr",
+            grantAmount: sch?.amount ? `₹${(sch.amount * 12).toLocaleString()} / yr` : "₹1,20,000 / yr",
             submittedOn: new Date(item.submitted_at || Date.now()).toLocaleDateString("en-IN", {
               day: "numeric",
               month: "short",

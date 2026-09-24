@@ -155,7 +155,7 @@ function ScholarshipsContent() {
           const levelVal = DB_TO_UI_LEVEL[rawLevel] || rawLevel || "Post-Matric";
           const deadlineVal = item.closing_date || item.deadline || "";
 
-          const rawAmount = item.amount_monthly ?? item.amount ?? 0;
+          const rawAmount = item.amount ?? 0;
           const parsedAmount = typeof rawAmount === "number" ? rawAmount : parseInt(String(rawAmount).replace(/[^0-9]/g, ""), 10);
           const amountVal = !isNaN(parsedAmount) && parsedAmount > 0 ? parsedAmount : 10000;
           const amountFormattedVal = typeof rawAmount === "string" && rawAmount.includes("₹") ? rawAmount : `₹${amountVal.toLocaleString("en-IN")} / month`;
@@ -313,7 +313,7 @@ function ScholarshipsContent() {
       const payload = {
         title: formTitle.trim(),
         description: formDescription.trim(),
-        amount_monthly: Number(formAmount),
+        amount: Number(formAmount),
         category_eligible: [formCategory],
         education_level: dbLevel,
         deadline: formDeadline,

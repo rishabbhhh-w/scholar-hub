@@ -117,7 +117,7 @@ export default function ApplicationsTrackingPage() {
           .order("submitted_at", { ascending: false });
 
         if (error) {
-          // Fallback if DB table uses amount_monthly column name
+          // Fallback query if column select fails
           const fallbackRes = await supabase
             .from("applications")
             .select(`
@@ -142,7 +142,7 @@ export default function ApplicationsTrackingPage() {
         if (apps) {
           const mapped: DBApplication[] = apps.map((item: any) => {
             const sch = item.scholarships;
-            const rawAmt = sch?.amount || sch?.amount_monthly || 10000;
+            const rawAmt = sch?.amount || 10000;
             const deadlineDate = sch?.deadline;
 
             return {
@@ -173,14 +173,14 @@ export default function ApplicationsTrackingPage() {
         // Fetch scholarships for new application modal
         const { data: schs } = await supabase
           .from("scholarships")
-          .select("id, title, amount_monthly, amount")
+          .select("id, title, amount")
           .eq("status", "active");
 
         if (schs && schs.length > 0) {
           const dbList = schs.map((s: any) => ({
             id: s.id,
             title: s.title,
-            amount_monthly: Number(s.amount_monthly || s.amount || 10000),
+            amount: Number(s.amount || 10000),
           }));
           setAvailableScholarships(dbList);
         } else {
@@ -469,7 +469,7 @@ export default function ApplicationsTrackingPage() {
               <option value="">-- Choose a scholarship scheme --</option>
               {availableScholarships.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.title} (₹{Number(s.amount_monthly || 10000).toLocaleString("en-IN")} / month)
+                  {s.title} (₹{Number(s.amount || 10000).toLocaleString("en-IN")} / month)
                 </option>
               ))}
             </select>

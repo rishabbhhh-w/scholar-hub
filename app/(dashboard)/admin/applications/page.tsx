@@ -44,7 +44,7 @@ export interface DBApplicationItem {
   scholarships?: {
     id: string;
     title: string;
-    amount_monthly: number;
+    amount: number;
     deadline: string;
   };
 }
@@ -80,7 +80,7 @@ export default function ApplicationsReviewPage() {
           submitted_at,
           notes,
           profiles:user_id (id, full_name, email, category, state, institution),
-          scholarships:scholarship_id (id, title, amount_monthly, deadline)
+          scholarships:scholarship_id (id, title, amount, deadline)
         `)
         .order("submitted_at", { ascending: false });
 
@@ -425,7 +425,7 @@ export default function ApplicationsReviewPage() {
                           {app.scholarships?.title || "National Scholarship"}
                         </p>
                         <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium">
-                          ₹{app.scholarships?.amount_monthly ? (app.scholarships.amount_monthly * 12).toLocaleString("en-IN") : "20,000"} / year
+                          ₹{app.scholarships?.amount ? (app.scholarships.amount * 12).toLocaleString("en-IN") : "20,000"} / year
                         </p>
                       </td>
 

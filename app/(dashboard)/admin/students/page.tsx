@@ -44,7 +44,7 @@ export interface StudentApplication {
   submitted_at: string;
   scholarships?: {
     title: string;
-    amount_monthly: number;
+    amount: number;
   };
 }
 
@@ -117,7 +117,7 @@ export default function AllStudentsPage() {
           status,
           tracking_number,
           submitted_at,
-          scholarships:scholarship_id (title, amount_monthly)
+          scholarships:scholarship_id (title, amount)
         `)
         .eq("user_id", student.id)
         .order("submitted_at", { ascending: false });

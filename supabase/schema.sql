@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS public.scholarships (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title TEXT NOT NULL,
     description TEXT NOT NULL,
-    amount_monthly NUMERIC NOT NULL,
+    amount NUMERIC NOT NULL,
     deadline DATE NOT NULL,
     category_eligible TEXT[] NOT NULL DEFAULT '{"ST","SC","OBC","Minority","General"}',
     level TEXT NOT NULL DEFAULT 'Post-Matric' CHECK (level IN ('Pre-Matric', 'Post-Matric', 'UG', 'PG', 'PhD')),

@@ -196,8 +196,8 @@ export default function StudentDashboardPage() {
                 month: "short",
                 year: "numeric",
               })}`,
-              amount: Number(topOne.amount_monthly) || 37000,
-              amountFormatted: `₹${Number(topOne.amount_monthly || 37000).toLocaleString("en-IN")} / month`,
+              amount: Number(topOne.amount) || 37000,
+              amountFormatted: `₹${Number(topOne.amount || 37000).toLocaleString("en-IN")} / month`,
               amountPeriod: "month",
               description: topOne.description,
               eligibilityCriteria: [

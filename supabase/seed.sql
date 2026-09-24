@@ -2,7 +2,7 @@
 -- SCHOLAR HUB SUPABASE SEED DATA (10 REAL INDIAN SCHOLARSHIPS & NOTIFICATIONS)
 -- ====================================================================
 
-INSERT INTO public.scholarships (id, title, description, amount_monthly, deadline, category_eligible, level, status)
+INSERT INTO public.scholarships (id, title, description, amount, deadline, category_eligible, level, status)
 VALUES
 (
   'a1b2c3d4-0001-4000-8000-000000000001',
@@ -107,7 +107,7 @@ VALUES
 ON CONFLICT (id) DO UPDATE SET
   title = EXCLUDED.title,
   description = EXCLUDED.description,
-  amount_monthly = EXCLUDED.amount_monthly,
+  amount = EXCLUDED.amount,
   deadline = EXCLUDED.deadline,
   category_eligible = EXCLUDED.category_eligible,
   level = EXCLUDED.level,

@@ -34,7 +34,7 @@ import {
 interface MatchedScheme {
   id: string;
   title: string;
-  amount_monthly: number;
+  amount: number;
   amountFormatted: string;
   deadline: string;
   deadlineFormatted: string;
@@ -165,8 +165,8 @@ export default function EligibilityCheckerPage() {
             results.push({
               id: item.id,
               title: item.title,
-              amount_monthly: Number(item.amount_monthly) || 10000,
-              amountFormatted: `₹${Number(item.amount_monthly || 10000).toLocaleString("en-IN")} / month`,
+              amount: Number(item.amount) || 10000,
+              amountFormatted: `₹${Number(item.amount || 10000).toLocaleString("en-IN")} / month`,
               deadline: item.deadline,
               deadlineFormatted: `Closes ${new Date(item.deadline).toLocaleDateString("en-IN", {
                 day: "numeric",
