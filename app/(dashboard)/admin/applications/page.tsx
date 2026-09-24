@@ -61,6 +61,7 @@ export default function ApplicationsReviewPage() {
   const [rejectReason, setRejectReason] = useState("Incomplete documents");
   const [customReason, setCustomReason] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const supabase = createClient();
@@ -128,18 +129,37 @@ export default function ApplicationsReviewPage() {
   const handleApprove = async () => {
     if (!selectedApp) return;
     setProcessing(true);
+    setModalError(null);
     try {
-      // 1. Update application status
-      const { error: appErr } = await supabase
+      // 1. Update application status with .select() to verify affected row
+      let { data: updatedRows, error: appErr } = await supabase
         .from("applications")
         .update({ status: "approved", updated_at: new Date().toISOString() })
-        .eq("id", selectedApp.id);
+        .eq("id", selectedApp.id)
+        .select();
 
-      if (appErr) throw appErr;
+      // Fallback matching by tracking_number if matching by id returned 0 rows
+      if (!appErr && (!updatedRows || updatedRows.length === 0) && selectedApp.tracking_number) {
+        const fallbackRes = await supabase
+          .from("applications")
+          .update({ status: "approved", updated_at: new Date().toISOString() })
+          .eq("tracking_number", selectedApp.tracking_number)
+          .select();
+        updatedRows = fallbackRes.data;
+        appErr = fallbackRes.error;
+      }
 
-      // 2. Insert notification for student
+      if (appErr) throw new Error(appErr.message);
+
+      if (!updatedRows || updatedRows.length === 0) {
+        throw new Error(
+          "Could not update application status. Record not found or permissions denied."
+        );
+      }
+
+      // 2. Insert notification for student (log warnings if RLS or notify fails)
       const scholarshipTitle = selectedApp.scholarships?.title || "Scholarship";
-      await supabase.from("notifications").insert({
+      const { error: notifErr } = await supabase.from("notifications").insert({
         user_id: selectedApp.user_id,
         title: "Application Approved",
         message: `Your application for ${scholarshipTitle} has been approved!`,
@@ -147,10 +167,16 @@ export default function ApplicationsReviewPage() {
         is_read: false,
       });
 
-      // Update local state
+      if (notifErr) {
+        console.warn("Notification creation notice:", notifErr.message);
+      }
+
+      // Update local state immediately
       setApplications((prev) =>
         prev.map((item) =>
-          item.id === selectedApp.id ? { ...item, status: "approved" } : item
+          item.id === selectedApp.id || item.tracking_number === selectedApp.tracking_number
+            ? { ...item, status: "approved" }
+            : item
         )
       );
 
@@ -159,15 +185,19 @@ export default function ApplicationsReviewPage() {
         text: `Application for ${selectedApp.profiles?.full_name || "student"} approved successfully!`,
       });
       setSelectedApp(null);
+      setModalError(null);
     } catch (err: unknown) {
       const errObj = err as { message?: string };
+      const msg = errObj.message || "Failed to approve application.";
+      console.error("Approve error:", err);
+      setModalError(msg);
       setToastMessage({
         type: "error",
-        text: errObj.message || "Failed to approve application.",
+        text: msg,
       });
     } finally {
       setProcessing(false);
-      setTimeout(() => setToastMessage(null), 4000);
+      setTimeout(() => setToastMessage(null), 5000);
     }
   };
 
@@ -175,22 +205,45 @@ export default function ApplicationsReviewPage() {
     if (!selectedApp) return;
     const finalReason = rejectReason === "Other" ? customReason.trim() || "Criteria not met" : rejectReason;
     setProcessing(true);
+    setModalError(null);
     try {
-      // 1. Update application status
-      const { error: appErr } = await supabase
+      // 1. Update application status with .select() to verify affected row
+      let { data: updatedRows, error: appErr } = await supabase
         .from("applications")
         .update({
           status: "rejected",
           notes: `Rejection reason: ${finalReason}`,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", selectedApp.id);
+        .eq("id", selectedApp.id)
+        .select();
 
-      if (appErr) throw appErr;
+      // Fallback matching by tracking_number if matching by id returned 0 rows
+      if (!appErr && (!updatedRows || updatedRows.length === 0) && selectedApp.tracking_number) {
+        const fallbackRes = await supabase
+          .from("applications")
+          .update({
+            status: "rejected",
+            notes: `Rejection reason: ${finalReason}`,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("tracking_number", selectedApp.tracking_number)
+          .select();
+        updatedRows = fallbackRes.data;
+        appErr = fallbackRes.error;
+      }
+
+      if (appErr) throw new Error(appErr.message);
+
+      if (!updatedRows || updatedRows.length === 0) {
+        throw new Error(
+          "Could not update application status. Record not found or permissions denied."
+        );
+      }
 
       // 2. Insert notification for student
       const scholarshipTitle = selectedApp.scholarships?.title || "Scholarship";
-      await supabase.from("notifications").insert({
+      const { error: notifErr } = await supabase.from("notifications").insert({
         user_id: selectedApp.user_id,
         title: "Application Rejected",
         message: `Your application for ${scholarshipTitle} has been rejected. Reason: ${finalReason}`,
@@ -198,10 +251,16 @@ export default function ApplicationsReviewPage() {
         is_read: false,
       });
 
-      // Update local state
+      if (notifErr) {
+        console.warn("Notification creation notice:", notifErr.message);
+      }
+
+      // Update local state immediately
       setApplications((prev) =>
         prev.map((item) =>
-          item.id === selectedApp.id ? { ...item, status: "rejected", notes: finalReason } : item
+          item.id === selectedApp.id || item.tracking_number === selectedApp.tracking_number
+            ? { ...item, status: "rejected", notes: finalReason }
+            : item
         )
       );
 
@@ -211,15 +270,19 @@ export default function ApplicationsReviewPage() {
       });
       setSelectedApp(null);
       setShowRejectReason(false);
+      setModalError(null);
     } catch (err: unknown) {
       const errObj = err as { message?: string };
+      const msg = errObj.message || "Failed to reject application.";
+      console.error("Reject error:", err);
+      setModalError(msg);
       setToastMessage({
         type: "error",
-        text: errObj.message || "Failed to reject application.",
+        text: msg,
       });
     } finally {
       setProcessing(false);
-      setTimeout(() => setToastMessage(null), 4000);
+      setTimeout(() => setToastMessage(null), 5000);
     }
   };
 
@@ -450,6 +513,7 @@ export default function ApplicationsReviewPage() {
                           onClick={() => {
                             setSelectedApp(app);
                             setShowRejectReason(false);
+                            setModalError(null);
                           }}
                           className="bg-[#064e3b] text-white hover:bg-[#04382a] text-xs font-semibold rounded-xl dark:bg-emerald-600 dark:hover:bg-emerald-700"
                         >
@@ -489,12 +553,29 @@ export default function ApplicationsReviewPage() {
                 onClick={() => {
                   setSelectedApp(null);
                   setShowRejectReason(false);
+                  setModalError(null);
                 }}
                 className="rounded-full p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-700 dark:hover:bg-[#153228] dark:hover:text-stone-200"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
+
+            {/* Modal Error Alert */}
+            {modalError && (
+              <div className="rounded-2xl bg-rose-50 dark:bg-rose-950/60 p-3.5 border border-rose-200 dark:border-rose-800 text-xs font-semibold text-rose-900 dark:text-rose-200 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                  <span>{modalError}</span>
+                </div>
+                <button
+                  onClick={() => setModalError(null)}
+                  className="p-1 hover:opacity-75"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
 
             {/* Application Info Cards */}
             <div className="space-y-4 text-xs">
@@ -597,6 +678,7 @@ export default function ApplicationsReviewPage() {
                 onClick={() => {
                   setSelectedApp(null);
                   setShowRejectReason(false);
+                  setModalError(null);
                 }}
                 disabled={processing}
                 className="w-full sm:w-auto text-xs"
