@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUserProfile } from "@/lib/hooks/useUserProfile";
+import { parseAmount } from "@/lib/utils";
 
 export interface AdminQueueItem {
   id: string;
@@ -145,6 +146,9 @@ export default function AdminDashboardPage() {
           const prof = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles;
           const sch = Array.isArray(item.scholarships) ? item.scholarships[0] : item.scholarships;
 
+          const parsedAmt = parseAmount(sch?.amount, 10000);
+          const yearly = parsedAmt > 10000 ? parsedAmt : parsedAmt * 12;
+
           return {
             id: item.id,
             userId: item.user_id,
@@ -154,7 +158,7 @@ export default function AdminDashboardPage() {
             state: prof?.state || "Jharkhand",
             institution: prof?.institution || "Central University of Jharkhand",
             schemeTitle: sch?.title || "National Tribal Fellowship Scheme",
-            grantAmount: sch?.amount ? `₹${(sch.amount * 12).toLocaleString()} / yr` : "₹1,20,000 / yr",
+            grantAmount: `₹${yearly.toLocaleString("en-IN")} / yr`,
             submittedOn: new Date(item.submitted_at || Date.now()).toLocaleDateString("en-IN", {
               day: "numeric",
               month: "short",

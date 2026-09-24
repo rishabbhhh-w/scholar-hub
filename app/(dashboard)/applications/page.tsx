@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/shared/Toast";
 import { applyToScholarship } from "@/lib/services/applications";
+import { parseAmount } from "@/lib/utils";
 
 function formatSubmittedDate(dateStr: string | null | undefined): string {
   if (!dateStr || !dateStr.trim()) return "Recently submitted";
@@ -150,7 +151,7 @@ export default function ApplicationsTrackingPage() {
               trackingNumber: formatTrackingNumber(item.tracking_number),
               scholarshipTitle: sch?.title || "National Scholarship Scheme",
               scholarshipId: item.scholarship_id,
-              amount: typeof rawAmt === "number" ? `₹${rawAmt.toLocaleString("en-IN")} / month` : String(rawAmt),
+              amount: `₹${parseAmount(rawAmt, 10000).toLocaleString("en-IN")} / month`,
               deadline: deadlineDate || "",
               deadlineFormatted: deadlineDate
                 ? new Date(deadlineDate).toLocaleDateString("en-IN", {

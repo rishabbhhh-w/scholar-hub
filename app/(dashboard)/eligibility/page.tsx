@@ -30,6 +30,7 @@ import {
   applyToScholarship,
   getUserAppliedScholarshipIds,
 } from "@/lib/services/applications";
+import { parseAmount } from "@/lib/utils";
 
 interface MatchedScheme {
   id: string;
@@ -165,8 +166,8 @@ export default function EligibilityCheckerPage() {
             results.push({
               id: item.id,
               title: item.title,
-              amount: Number(item.amount) || 10000,
-              amountFormatted: `₹${Number(item.amount || 10000).toLocaleString("en-IN")} / month`,
+              amount: parseAmount(item.amount, 10000),
+              amountFormatted: `₹${parseAmount(item.amount, 10000).toLocaleString("en-IN")} / month`,
               deadline: item.deadline,
               deadlineFormatted: `Closes ${new Date(item.deadline).toLocaleDateString("en-IN", {
                 day: "numeric",

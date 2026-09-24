@@ -36,6 +36,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getInitials } from "@/lib/hooks/useUserProfile";
 import { useToast } from "@/components/shared/Toast";
+import { parseAmount } from "@/lib/utils";
 import {
   applyToScholarship,
   getUserAppliedScholarshipIds,
@@ -196,8 +197,8 @@ export default function StudentDashboardPage() {
                 month: "short",
                 year: "numeric",
               })}`,
-              amount: Number(topOne.amount) || 37000,
-              amountFormatted: `₹${Number(topOne.amount || 37000).toLocaleString("en-IN")} / month`,
+              amount: parseAmount(topOne.amount, 37000),
+              amountFormatted: `₹${parseAmount(topOne.amount, 37000).toLocaleString("en-IN")} / month`,
               amountPeriod: "month",
               description: topOne.description,
               eligibilityCriteria: [

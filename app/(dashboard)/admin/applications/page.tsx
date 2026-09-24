@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { parseAmount } from "@/lib/utils";
 
 export interface DBApplicationItem {
   id: string;
@@ -500,7 +501,11 @@ export default function ApplicationsReviewPage() {
                           {app.scholarships?.title || "National Scholarship"}
                         </p>
                         <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium">
-                          ₹{app.scholarships?.amount ? (app.scholarships.amount * 12).toLocaleString("en-IN") : "20,000"} / year
+                          ₹{(() => {
+                            const parsed = parseAmount(app.scholarships?.amount, 20000);
+                            const yearly = parsed > 10000 ? parsed : parsed * 12;
+                            return yearly.toLocaleString("en-IN");
+                          })()} / year
                         </p>
                       </td>
 

@@ -24,3 +24,14 @@ export function getDaysRemaining(deadlineStr: string): number {
   const diff = Math.ceil((target - now) / (1000 * 60 * 60 * 24));
   return Math.max(0, diff);
 }
+
+export function parseAmount(val: any, fallback = 10000): number {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === "number") return isNaN(val) || val <= 0 ? fallback : val;
+  if (typeof val === "string") {
+    const cleaned = val.replace(/[^0-9.]/g, "");
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) || parsed <= 0 ? fallback : parsed;
+  }
+  return fallback;
+}

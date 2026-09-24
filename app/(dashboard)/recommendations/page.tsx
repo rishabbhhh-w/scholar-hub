@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/shared/Toast";
+import { parseAmount } from "@/lib/utils";
 import {
   applyToScholarship,
   getUserAppliedScholarshipIds,
@@ -125,7 +126,7 @@ export default function AIRecommendationsPage() {
           const levelMatched = Boolean(item.level);
           if (levelMatched) score += 20;
 
-          const monthlyNum = Number(item.amount) || 10000;
+          const monthlyNum = parseAmount(item.amount, 10000);
           const closingDateFormatted = `Closes ${new Date(item.deadline).toLocaleDateString("en-IN", {
             day: "numeric",
             month: "short",

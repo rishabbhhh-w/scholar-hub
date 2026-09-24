@@ -42,6 +42,7 @@ import {
   getUserAppliedScholarshipIds,
 } from "@/lib/services/applications";
 import { useUserProfile } from "@/lib/hooks/useUserProfile";
+import { parseAmount } from "@/lib/utils";
 
 const UI_TO_DB_LEVEL: Record<string, string> = {
   "Pre-Matric": "Pre-Matric",
@@ -155,10 +156,8 @@ function ScholarshipsContent() {
           const levelVal = DB_TO_UI_LEVEL[rawLevel] || rawLevel || "Post-Matric";
           const deadlineVal = item.closing_date || item.deadline || "";
 
-          const rawAmount = item.amount ?? 0;
-          const parsedAmount = typeof rawAmount === "number" ? rawAmount : parseInt(String(rawAmount).replace(/[^0-9]/g, ""), 10);
-          const amountVal = !isNaN(parsedAmount) && parsedAmount > 0 ? parsedAmount : 10000;
-          const amountFormattedVal = typeof rawAmount === "string" && rawAmount.includes("₹") ? rawAmount : `₹${amountVal.toLocaleString("en-IN")} / month`;
+          const amountVal = parseAmount(item.amount, 10000);
+          const amountFormattedVal = `₹${amountVal.toLocaleString("en-IN")} / month`;
 
           const statusVal = item.status === "active" || item.is_active === true ? "active" : "closed";
 

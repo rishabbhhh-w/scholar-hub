@@ -27,6 +27,7 @@ import { Logo } from "@/components/shared/Logo";
 import { DetailModal } from "@/components/shared/DetailModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/client";
+import { parseAmount } from "@/lib/utils";
 
 interface HeroScholarship {
   id: string;
@@ -79,7 +80,7 @@ export default function LandingPage() {
           const heroList: HeroScholarship[] = data.map((item: any) => ({
             id: item.id,
             title: item.title,
-            amount: Number(item.amount || 10000),
+            amount: parseAmount(item.amount, 10000),
             deadline: item.deadline,
             category_eligible: item.category_eligible,
           }));
@@ -91,6 +92,8 @@ export default function LandingPage() {
               : typeof item.category_eligible === "string"
               ? item.category_eligible.replace(/[{}]/g, "").split(",")
               : ["ST", "SC", "OBC", "General"];
+
+            const parsedAmt = parseAmount(item.amount, 10000);
 
             return {
               id: item.id,
@@ -109,8 +112,8 @@ export default function LandingPage() {
                 month: "short",
                 year: "numeric",
               })}`,
-              amount: Number(item.amount) || 10000,
-              amountFormatted: `₹${Number(item.amount || 10000).toLocaleString("en-IN")} / month`,
+              amount: parsedAmt,
+              amountFormatted: `₹${parsedAmt.toLocaleString("en-IN")} / month`,
               amountPeriod: "month",
               description: item.description || "Government scholarship scheme.",
               eligibilityCriteria: eligibleArray.map((c) => `${c} candidates eligible`),
@@ -304,7 +307,7 @@ export default function LandingPage() {
 
                             <div className="mt-2 flex items-center justify-between text-xs">
                               <span className="font-semibold text-[#064e3b] dark:text-emerald-400">
-                                ₹{(s.amount || 0).toLocaleString("en-IN")} / month
+                                ₹{parseAmount(s.amount, 10000).toLocaleString("en-IN")} / month
                               </span>
                               <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
                                 Closes {formattedDeadline}
