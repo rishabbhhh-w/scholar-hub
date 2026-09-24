@@ -131,10 +131,10 @@ export default function ApplicationsReviewPage() {
     setProcessing(true);
     setModalError(null);
     try {
-      // 1. Update application status with .select() to verify affected row
+      // 1. Update application status (only status field to be schema-cache safe)
       let { data: updatedRows, error: appErr } = await supabase
         .from("applications")
-        .update({ status: "approved", updated_at: new Date().toISOString() })
+        .update({ status: "approved" })
         .eq("id", selectedApp.id)
         .select();
 
@@ -142,7 +142,7 @@ export default function ApplicationsReviewPage() {
       if (!appErr && (!updatedRows || updatedRows.length === 0) && selectedApp.tracking_number) {
         const fallbackRes = await supabase
           .from("applications")
-          .update({ status: "approved", updated_at: new Date().toISOString() })
+          .update({ status: "approved" })
           .eq("tracking_number", selectedApp.tracking_number)
           .select();
         updatedRows = fallbackRes.data;
@@ -207,26 +207,38 @@ export default function ApplicationsReviewPage() {
     setProcessing(true);
     setModalError(null);
     try {
-      // 1. Update application status with .select() to verify affected row
-      let { data: updatedRows, error: appErr } = await supabase
+      // 1. Update application status (try with notes first; if schema cache lacks notes, fallback to status only)
+      let updatedRows: any[] | null = null;
+      let appErr: any = null;
+
+      const rejectWithNotesRes = await supabase
         .from("applications")
         .update({
           status: "rejected",
           notes: `Rejection reason: ${finalReason}`,
-          updated_at: new Date().toISOString(),
         })
         .eq("id", selectedApp.id)
         .select();
+
+      if (rejectWithNotesRes.error && rejectWithNotesRes.error.message.includes("schema cache")) {
+        // Fallback: update status only if notes column is not present in schema cache
+        const fallbackStatusRes = await supabase
+          .from("applications")
+          .update({ status: "rejected" })
+          .eq("id", selectedApp.id)
+          .select();
+        updatedRows = fallbackStatusRes.data;
+        appErr = fallbackStatusRes.error;
+      } else {
+        updatedRows = rejectWithNotesRes.data;
+        appErr = rejectWithNotesRes.error;
+      }
 
       // Fallback matching by tracking_number if matching by id returned 0 rows
       if (!appErr && (!updatedRows || updatedRows.length === 0) && selectedApp.tracking_number) {
         const fallbackRes = await supabase
           .from("applications")
-          .update({
-            status: "rejected",
-            notes: `Rejection reason: ${finalReason}`,
-            updated_at: new Date().toISOString(),
-          })
+          .update({ status: "rejected" })
           .eq("tracking_number", selectedApp.tracking_number)
           .select();
         updatedRows = fallbackRes.data;
