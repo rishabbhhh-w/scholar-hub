@@ -309,10 +309,10 @@ function ScholarshipsContent() {
 
     try {
       const dbLevel = UI_TO_DB_LEVEL[formLevel] || formLevel;
-      const payload = {
+      let payload: Record<string, any> = {
         title: formTitle.trim(),
         description: formDescription.trim(),
-        amount: Number(formAmount),
+        amount: parseAmount(formAmount, 10000),
         category_eligible: [formCategory],
         education_level: dbLevel,
         deadline: formDeadline,
@@ -321,10 +321,30 @@ function ScholarshipsContent() {
 
       if (editingScheme) {
         // Update existing scheme
-        const { error } = await supabase
+        let { error } = await supabase
           .from("scholarships")
           .update(payload)
           .eq("id", editingScheme.id);
+
+        if (error && error.message.includes("category_eligible")) {
+          delete payload.category_eligible;
+          payload.category = formCategory;
+          const fallbackRes = await supabase
+            .from("scholarships")
+            .update(payload)
+            .eq("id", editingScheme.id);
+          error = fallbackRes.error;
+        }
+
+        if (error && error.message.includes("education_level")) {
+          delete payload.education_level;
+          payload.level = dbLevel;
+          const fallbackRes = await supabase
+            .from("scholarships")
+            .update(payload)
+            .eq("id", editingScheme.id);
+          error = fallbackRes.error;
+        }
 
         if (error) {
           throw new Error(error.message);
@@ -333,9 +353,23 @@ function ScholarshipsContent() {
         toast.success("Scholarship scheme updated successfully!");
       } else {
         // Insert new scheme
-        const { error } = await supabase
+        let { error } = await supabase
           .from("scholarships")
           .insert(payload);
+
+        if (error && error.message.includes("category_eligible")) {
+          delete payload.category_eligible;
+          payload.category = formCategory;
+          const fallbackRes = await supabase.from("scholarships").insert(payload);
+          error = fallbackRes.error;
+        }
+
+        if (error && error.message.includes("education_level")) {
+          delete payload.education_level;
+          payload.level = dbLevel;
+          const fallbackRes = await supabase.from("scholarships").insert(payload);
+          error = fallbackRes.error;
+        }
 
         if (error) {
           throw new Error(error.message);
